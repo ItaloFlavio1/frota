@@ -242,3 +242,20 @@ create index if not exists idx_desp_viagem        on despesas(viagem_id);
 create index if not exists idx_abast_caminhao     on abastecimentos(caminhao_id);
 create index if not exists idx_manut_caminhao     on manutencoes(caminhao_id);
 create index if not exists idx_planos_caminhao    on planos_manutencao(caminhao_id);
+
+-- ---------------------------------------------------------------------
+-- Cadastro pela tela do sistema: só o PRIMEIRO acesso pode criar conta.
+-- Para permitir mais pessoas, troque o 1 abaixo (ex.: 3) e rode de novo.
+-- ---------------------------------------------------------------------
+create or replace function limitar_cadastros() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from auth.users) >= 1 then
+    raise exception 'Cadastro fechado';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_limitar_cadastros on auth.users;
+create trigger trg_limitar_cadastros before insert on auth.users
+  for each row execute function limitar_cadastros();

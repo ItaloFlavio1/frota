@@ -504,22 +504,43 @@ async function render() {
 F.definirAoMudar(render);
 addEventListener('hashchange', () => { render(); scrollTo(0, 0); });
 
-async function telaLogin() {
+async function telaLogin(modo = 'entrar') {
   document.body.classList.add('sem-sessao');
+  const criar = modo === 'criar';
   $conteudo().innerHTML = `<form class="login cartao" novalidate>
-    <h1>Controle de Frota</h1>
+    <h1>${criar ? 'Criar login' : 'Controle de Frota'}</h1>
+    ${criar ? '<p class="nota">Primeiro acesso: escolha o e-mail e a senha que vão entrar no sistema. Depois disso, ninguém mais consegue criar login.</p>' : ''}
     <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
-    <label>Senha <input name="senha" type="password" autocomplete="current-password" required></label>
+    <label>Senha <input name="senha" type="password" autocomplete="${criar ? 'new-password' : 'current-password'}" required></label>
+    ${criar ? '<label>Repita a senha <input name="senha2" type="password" autocomplete="new-password" required></label>' : ''}
     <p class="erro" role="alert" hidden></p>
-    <button class="btn" type="submit">Entrar</button>
+    <p class="nota" data-ok hidden></p>
+    <button class="btn" type="submit">${criar ? 'Criar login' : 'Entrar'}</button>
+    <button class="link" type="button" data-trocar>${criar ? 'Já tenho login — entrar' : 'Primeiro acesso? Criar login'}</button>
   </form>`;
   const form = $conteudo().querySelector('form');
+  form.querySelector('[data-trocar]').onclick = () => telaLogin(criar ? 'entrar' : 'criar');
   form.onsubmit = async e => {
     e.preventDefault();
     const erro = form.querySelector('.erro');
     erro.hidden = true;
+    const email = form.email.value.trim(), senha = form.senha.value;
     try {
-      await db.entrar(form.email.value.trim(), form.senha.value);
+      if (!email || !senha) throw new Error('Preencha e-mail e senha.');
+      if (criar) {
+        if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+        if (senha !== form.senha2.value) throw new Error('As senhas não são iguais.');
+        const entrou = await db.cadastrar(email, senha);
+        if (!entrou) {
+          const ok = form.querySelector('[data-ok]');
+          ok.innerHTML = `<strong>Login criado!</strong> Enviamos um e-mail de confirmação para ${esc(email)}. Abra o link do e-mail (mesmo que a página aberta dê erro) e depois volte aqui e clique em "Já tenho login — entrar".`;
+          ok.hidden = false;
+          form.querySelector('[type=submit]').hidden = true;
+          return;
+        }
+      } else {
+        await db.entrar(email, senha);
+      }
       document.body.classList.remove('sem-sessao');
       await iniciarSessao();
     } catch (err) {

@@ -28,6 +28,14 @@ function criarSupabase() {
       const { error } = await sb.auth.signInWithPassword({ email, password: senha });
       erro(error);
     },
+    // Devolve true se já entrou; false se o Supabase pediu confirmação por e-mail.
+    async cadastrar(email, senha) {
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha, options: { emailRedirectTo: location.origin + location.pathname },
+      });
+      erro(error);
+      return !!data.session;
+    },
     async sair() { await sb.auth.signOut(); },
     async listar(tabela) {
       const todos = [];
@@ -70,6 +78,11 @@ function semOwner(linha) {
 
 function traduzirErro(msg = '') {
   if (msg.includes('Invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if (msg.includes('Email not confirmed')) return 'E-mail ainda não confirmado. Abra o link que chegou no seu e-mail e tente de novo.';
+  if (msg.includes('Database error saving new user') || msg.includes('Cadastro fechado')) return 'O login deste sistema já foi criado. Use a opção Entrar.';
+  if (msg.includes('Password should be')) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if (msg.includes('User already registered')) return 'Este e-mail já tem login. Use a opção Entrar.';
+  if (msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
   if (msg.includes('caminhoes_owner_id_placa_key')) return 'Já existe um caminhão com essa placa.';
   if (msg.includes('Recebimento excede')) return 'O recebimento ultrapassa o valor que falta receber deste frete.';
   if (msg.includes('violates foreign key')) return 'Este registro está ligado a outros lançamentos e não pode ser apagado.';

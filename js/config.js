@@ -4,5 +4,5 @@
 //
 // A chave "anon" é pública por natureza; quem protege os dados é o login
 // e as regras de segurança (RLS) criadas pelo arquivo supabase/schema.sql.
-export const SUPABASE_URL = '';
-export const SUPABASE_ANON_KEY = '';
+export const SUPABASE_URL = 'https://hgmcawgafnspenhbqgue.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_tUXb8XG-jO23_zkOZmSbbQ_KJ5q3c6T';
