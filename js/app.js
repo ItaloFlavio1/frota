@@ -502,12 +502,18 @@ async function render() {
 }
 
 F.definirAoMudar(render);
-addEventListener('hashchange', () => { render(); scrollTo(0, 0); });
+addEventListener('hashchange', () => {
+  // Ao trocar de tela (inclusive pelo botão voltar do celular), fecha formulários abertos.
+  document.querySelectorAll('dialog[open]').forEach(dl => { dl.close(); dl.remove(); });
+  render();
+  scrollTo(0, 0);
+});
 
 async function telaLogin(modo = 'entrar') {
   document.body.classList.add('sem-sessao');
   const criar = modo === 'criar';
   $conteudo().innerHTML = `<form class="login cartao" novalidate>
+    <div class="logo-login"><img src="assets/logo.jpg" alt="Cabral Transportes — cargas pesadas, grandes destinos" width="640" height="640"></div>
     <h1>${criar ? 'Criar login' : 'Controle de Frota'}</h1>
     ${criar ? '<p class="nota">Crie seu login com e-mail e senha. O sistema aceita no máximo 2 logins, e os dois veem os mesmos dados.</p>' : ''}
     <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
