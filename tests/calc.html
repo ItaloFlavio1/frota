@@ -71,6 +71,16 @@ ok('despesa do A não altera o B', b.resultadoC, -120000);
 const tot = C.somarResumos([a, b]);
 ok('total da frota = soma dos caminhões', tot.faturadoC + tot.despesasC, a.faturadoC + b.faturadoC + a.despesasC + b.despesasC);
 
+// Recebimento avulso (sem frete): faturamento e recebido do caminhão, na data em que entrou
+const dAv = { ...d, recebimentos: [...d.recebimentos, { id: 'rav', frete_id: null, caminhao_id: 'B', data: '2026-10-20', valor: 700 }] };
+const bAv = C.resumoCaminhao(dAv, 'B', ...outubro);
+ok('avulso entra no faturado e no recebido do B', [bAv.faturadoC, bAv.recebidoC], [70000, 370000]);
+ok('avulso não cria valor a receber', bAv.aReceberC, 0);
+ok('avulso não mexe no A', C.resumoCaminhao(dAv, 'A', ...outubro).faturadoC, a.faturadoC);
+ok('avulso fora do período não conta', C.resumoCaminhao(dAv, 'B', '2026-11-01', '2026-11-30').faturadoC, 0);
+ok('caminhão do recebimento avulso', C.caminhaoDoRecebimento(dAv, dAv.recebimentos.at(-1)), 'B');
+ok('caminhão do recebimento de frete', C.caminhaoDoRecebimento(dAv, d.recebimentos[0]), 'A');
+
 // Manutenção
 const plano = { ativo: true, proximo_km: 120000, aviso_km: 1000, aviso_dias: 30 };
 ok('faltam 500 km → próxima', [C.statusPlano(plano, { hodometro: 119500 }).estado, C.statusPlano(plano, { hodometro: 119500 }).kmRestante], ['proxima', 500]);

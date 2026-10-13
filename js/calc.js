@@ -48,6 +48,13 @@ export function caminhaoDoFrete(d, frete) {
   return d.viagens.find(v => v.id === frete.viagem_id)?.caminhao_id ?? null;
 }
 
+// Recebimento de frete pertence ao caminhão da viagem; o avulso tem o caminhão próprio.
+export function caminhaoDoRecebimento(d, r) {
+  if (!r.frete_id) return r.caminhao_id ?? null;
+  const f = d.fretes.find(x => x.id === r.frete_id);
+  return f ? caminhaoDoFrete(d, f) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Viagem: diesel estimado e resultado estimado
 // ---------------------------------------------------------------------------
@@ -94,10 +101,14 @@ export function resumoCaminhao(d, caminhaoId, ini, fim) {
   const despesas = d.despesas.filter(x => x.caminhao_id === caminhaoId);
 
   const fretesPeriodo = fretes.filter(f => noPeriodo(f.data, ini, fim));
-  const faturadoC = fretesPeriodo.reduce((s, f) => s + centavos(f.valor_bruto), 0);
-  const recebidoC = d.recebimentos
-    .filter(r => fretesIds.has(r.frete_id) && noPeriodo(r.data, ini, fim))
+  // Avulsos (sem frete) são faturamento e recebimento ao mesmo tempo, na data em que entraram.
+  const avulsosC = d.recebimentos
+    .filter(r => !r.frete_id && r.caminhao_id === caminhaoId && noPeriodo(r.data, ini, fim))
     .reduce((s, r) => s + centavos(r.valor), 0);
+  const faturadoC = fretesPeriodo.reduce((s, f) => s + centavos(f.valor_bruto), 0) + avulsosC;
+  const recebidoC = d.recebimentos
+    .filter(r => r.frete_id && fretesIds.has(r.frete_id) && noPeriodo(r.data, ini, fim))
+    .reduce((s, r) => s + centavos(r.valor), 0) + avulsosC;
   const despesasC = despesas.filter(x => noPeriodo(x.data_gasto, ini, fim))
     .reduce((s, x) => s + centavos(x.valor), 0);
   const pagamentosC = despesas.filter(x => x.pago && noPeriodo(x.data_pagamento, ini, fim))
@@ -105,14 +116,14 @@ export function resumoCaminhao(d, caminhaoId, ini, fim) {
   const aReceberC = fretesPeriodo.reduce((s, f) => s + Math.max(0, aReceberDoFrete(d, f)), 0);
 
   return {
-    faturadoC, recebidoC, despesasC, pagamentosC, aReceberC,
+    faturadoC, recebidoC, despesasC, pagamentosC, aReceberC, avulsosC,
     resultadoC: faturadoC - despesasC,
     caixaC: recebidoC - pagamentosC,
   };
 }
 
 export function somarResumos(lista) {
-  const total = { faturadoC: 0, recebidoC: 0, despesasC: 0, pagamentosC: 0, aReceberC: 0, resultadoC: 0, caixaC: 0 };
+  const total = { faturadoC: 0, recebidoC: 0, despesasC: 0, pagamentosC: 0, aReceberC: 0, resultadoC: 0, caixaC: 0, avulsosC: 0 };
   for (const r of lista) for (const k in total) total[k] += r[k];
   return total;
 }
@@ -189,6 +200,7 @@ export function anosComDados(d) {
   const anos = new Set([Number(hojeISO().slice(0, 4))]);
   for (const f of d.fretes) if (f.data) anos.add(Number(f.data.slice(0, 4)));
   for (const x of d.despesas) if (x.data_gasto) anos.add(Number(x.data_gasto.slice(0, 4)));
+  for (const r of d.recebimentos) if (!r.frete_id && r.data) anos.add(Number(r.data.slice(0, 4)));
   return [...anos].sort();
 }
 
@@ -243,11 +255,19 @@ export function fretesEmAberto(d, hoje = hojeISO()) {
     .map(x => ({ ...x, atrasado: !!x.f.vencimento && x.f.vencimento < hoje }));
 }
 
+// Cliente é texto livre (sem cadastro). Registros antigos podem ter só o cliente_id.
+export function clienteDe(d, x) {
+  if (x?.cliente_nome) return x.cliente_nome.trim();
+  return d.clientes?.find(c => c.id === x?.cliente_id)?.nome || '';
+}
+export const chaveCliente = nome => nome.trim().toLowerCase().replace(/\s+/g, ' ');
+
 export function receberPorCliente(d, hoje = hojeISO()) {
   const porCliente = new Map();
   for (const x of fretesEmAberto(d, hoje)) {
-    const k = x.f.cliente_id || '';
-    const atual = porCliente.get(k) || { clienteId: k || null, aReceberC: 0, atrasadoC: 0, fretes: [] };
+    const nome = clienteDe(d, x.f);
+    const k = chaveCliente(nome);
+    const atual = porCliente.get(k) || { nome, aReceberC: 0, atrasadoC: 0, fretes: [] };
     atual.aReceberC += x.faltaC;
     if (x.atrasado) atual.atrasadoC += x.faltaC;
     atual.fretes.push(x);

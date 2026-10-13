@@ -21,7 +21,7 @@ export const AJUDA = {
   despesa_viagem: ['despesa vinculada à viagem', 'Esta despesa entra no custo daquela viagem. Deixe sem viagem para gastos gerais do caminhão.'],
   resultado_viagem: ['resultado estimado da viagem', 'Fretes da viagem menos diesel estimado e outras despesas ligadas a ela. Pode faltar custo ainda não lançado.'],
   custo_km: ['custo por km', 'Custos estimados da viagem ÷ distância percorrida. Exemplo: R$ 2.370 ÷ 800 km = R$ 2,96/km.'],
-  faturado: ['faturado', 'Soma dos fretes com data dentro do período escolhido.'],
+  faturado: ['faturado', 'Soma dos fretes com data dentro do período escolhido, mais os recebimentos avulsos (sem frete) recebidos no período.'],
   despesas: ['despesas registradas', 'Soma dos gastos com data do gasto dentro do período, pagos ou não. Inclui abastecimentos e manutenções.'],
   pagamentos: ['pagamentos', 'Soma das despesas pagas com data de pagamento dentro do período.'],
   resultado_caminhao: ['resultado operacional', 'Fretes cadastrados menos despesas registradas no período escolhido; depende dos lançamentos feitos. Não é lucro contábil.'],
@@ -31,7 +31,7 @@ export const AJUDA = {
   intervalo: ['intervalo da manutenção', 'De quantos em quantos km e/ou dias o serviço se repete. Ao registrar a execução, o próximo vencimento é calculado. Exemplo: feito com 120.000 km, intervalo 20.000 → próximo em 140.000 km.'],
   aviso: ['faixa de aviso', 'Quanto antes do vencimento o sistema começa a avisar. Padrão: 1.000 km ou 30 dias.'],
   media_real: ['média real', 'Km rodados entre dois tanques completos ÷ litros abastecidos nesse intervalo (inclusive abastecimentos parciais no meio).'],
-  cliente: ['cliente', 'Quem contratou o frete. Serve para ver quanto cada cliente deve. Cadastre clientes na tela Clientes.'],
+  cliente: ['cliente', 'Digite o nome de quem contratou — não precisa cadastrar. Os nomes já usados aparecem como sugestão. Na tela Clientes você vê quanto cada um deve.'],
   vencimento: ['vencimento do pagamento', 'Data combinada para o cliente pagar. Depois dela, o valor que falta aparece como atrasado.'],
   atrasados: ['recebimentos atrasados', 'Fretes com vencimento já passado e que ainda têm valor a receber.'],
   margem: ['margem', 'Resultado operacional ÷ faturamento. Exemplo: R$ 2.000 de resultado em R$ 10.000 faturados = 20%.'],
@@ -44,6 +44,7 @@ export const AJUDA = {
   parcelas: ['parcelas', 'Para compras parceladas: o sistema cria uma conta por mês, a partir do 1º vencimento. Exemplo: 10 parcelas de R$ 1.500, a 1ª em 10/11.'],
   boletos_vencer: ['boletos a pagar', 'Boletos ainda não pagos que já venceram ou vencem nos próximos 7 dias.'],
   caminhao_desativado: ['caminhão desativado', 'Caminhão vendido ou parado. Não aparece para novos lançamentos, mas todo o histórico continua nos relatórios. Use Reativar para voltar a usar.'],
+  recebimento_avulso: ['recebimento avulso', 'Dinheiro que entrou sem um frete lançado no sistema, como um frete por fora. Conta como faturamento e como recebido do caminhão escolhido, na data em que entrou.'],
   status_viagem: ['situação da viagem', 'Planejada, em andamento, concluída ou cancelada. Serve para organizar a lista.'],
 };
 

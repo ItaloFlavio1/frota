@@ -5,6 +5,7 @@ import { carregarScript } from './painel.js';
 import { nomeCategoria, nomeStatus } from './forms.js';
 import {
   centavos, serieMensal, resumoCaminhao, recebidoDoFrete, caminhaoDoFrete, receberPorCliente, hojeISO,
+  caminhaoDoRecebimento, clienteDe,
 } from './calc.js';
 
 const XLSX_JS = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
@@ -41,18 +42,19 @@ export async function baixarExcel({ ano, caminhao }) {
   const fretes = D.fretes.filter(f => ids.includes(caminhaoDoFrete(D, f)) && noAno(f.data, ano));
   aba('Fretes', S.ordenarPorData(fretes).reverse().map(f => {
     const v = S.viagem(f.viagem_id), rec = recebidoDoFrete(D, f.id);
-    return { 'Data': data(f.data), 'Placa': placa(v?.caminhao_id), 'Cliente': S.cliente(f.cliente_id)?.nome || '',
+    return { 'Data': data(f.data), 'Placa': placa(v?.caminhao_id), 'Cliente': clienteDe(D, f),
       'Origem': f.origem || '', 'Destino': f.destino || '', 'Peso (t)': f.peso_t != null ? Number(f.peso_t) : '',
       'Cobrança': f.modalidade === 'tonelada' ? 'Por tonelada' : 'Valor fechado', 'R$/t': f.preco_t != null ? Number(f.preco_t) : '',
       'Valor bruto': Number(f.valor_bruto), 'Recebido': r$(rec), 'A receber': r$(centavos(f.valor_bruto) - rec),
       'Vencimento': data(f.vencimento), 'Situação da viagem': nomeStatus(v?.status), 'Lançado por': S.autor(f) };
   }));
-  aba('Recebimentos', S.ordenarPorData(D.recebimentos.filter(r => {
-    const f = S.frete(r.frete_id); return f && ids.includes(caminhaoDoFrete(D, f)) && noAno(r.data, ano);
-  })).reverse().map(r => {
-    const f = S.frete(r.frete_id);
-    return { 'Data': data(r.data), 'Placa': placa(caminhaoDoFrete(D, f)), 'Cliente': S.cliente(f.cliente_id)?.nome || '',
-      'Frete': `${f.origem || '?'} → ${f.destino || '?'}`, 'Valor': Number(r.valor), 'Observação': r.observacao || '', 'Lançado por': S.autor(r) };
+  aba('Recebimentos', S.ordenarPorData(D.recebimentos.filter(r =>
+    ids.includes(caminhaoDoRecebimento(D, r)) && noAno(r.data, ano))).reverse().map(r => {
+    const f = r.frete_id && S.frete(r.frete_id);
+    return { 'Data': data(r.data), 'Placa': placa(caminhaoDoRecebimento(D, r)),
+      'Tipo': f ? 'Frete' : 'Avulso', 'Cliente': clienteDe(D, f || r),
+      'Frete / descrição': f ? `${f.origem || '?'} → ${f.destino || '?'}` : (r.descricao || ''),
+      'Valor': Number(r.valor), 'Observação': r.observacao || '', 'Lançado por': S.autor(r) };
   }));
   aba('Despesas', S.ordenarPorData(D.despesas.filter(x => doFiltro(x) && noAno(x.data_gasto, ano)), 'data_gasto').reverse().map(x => ({
     'Data do gasto': data(x.data_gasto), 'Placa': placa(x.caminhao_id), 'Categoria': nomeCategoria(x.categoria),
@@ -79,7 +81,7 @@ export async function baixarExcel({ ano, caminhao }) {
       'Código do boleto': x.linha_digitavel || '',
     })));
   aba('A receber por cliente', receberPorCliente(D).map(x => ({
-    'Cliente': x.clienteId ? S.cliente(x.clienteId)?.nome : 'Sem cliente', 'A receber (hoje)': r$(x.aReceberC),
+    'Cliente': x.nome || 'Sem cliente', 'A receber (hoje)': r$(x.aReceberC),
     'Atrasado (hoje)': r$(x.atrasadoC), 'Fretes em aberto': x.fretes.length,
   })));
 

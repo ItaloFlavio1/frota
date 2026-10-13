@@ -309,3 +309,39 @@ create index if not exists idx_desp_vencimento on despesas(vencimento) where not
 alter table despesas drop constraint if exists despesas_categoria_check;
 alter table despesas add constraint despesas_categoria_check check (categoria in
   ('diesel','pedagio','alimentacao','manutencao','pneus','comissao','financiamento','seguro','impostos','outros'));
+
+-- ---------------------------------------------------------------------
+-- Versão 4: recebimento avulso (dinheiro que entrou sem frete lançado)
+-- ---------------------------------------------------------------------
+alter table recebimentos alter column frete_id drop not null;
+alter table recebimentos add column if not exists caminhao_id uuid references caminhoes(id);
+alter table recebimentos add column if not exists cliente_id uuid references clientes(id);
+alter table recebimentos add column if not exists descricao text;
+alter table recebimentos drop constraint if exists recebimento_frete_ou_caminhao;
+alter table recebimentos add constraint recebimento_frete_ou_caminhao
+  check (frete_id is not null or caminhao_id is not null);
+create index if not exists idx_receb_caminhao on recebimentos(caminhao_id);
+
+create or replace function checar_recebimento() returns trigger
+language plpgsql as $$
+declare total numeric; bruto numeric;
+begin
+  if new.frete_id is null then return new; end if;  -- avulso: não há frete para comparar
+  select valor_bruto into bruto from fretes where id = new.frete_id;
+  select coalesce(sum(valor), 0) into total from recebimentos
+   where frete_id = new.frete_id and id <> new.id;
+  if total + new.valor > bruto then
+    raise exception 'Recebimento excede o valor do frete (frete: %, já recebido: %, novo: %)',
+      bruto, total, new.valor;
+  end if;
+  return new;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Versão 5: cliente em texto livre (sem cadastro)
+-- ---------------------------------------------------------------------
+alter table fretes add column if not exists cliente_nome text;
+alter table recebimentos add column if not exists cliente_nome text;
+-- Fretes antigos que usavam o cadastro passam a ter o nome escrito.
+update fretes f set cliente_nome = c.nome from clientes c
+ where f.cliente_id = c.id and f.cliente_nome is null;

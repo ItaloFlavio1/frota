@@ -8,8 +8,23 @@ import {
 import { iconeAjuda } from './help.js';
 import {
   valorBrutoFrete, pesoEmToneladas, centavos, aReceberDoFrete, recebidoDoFrete,
-  hojeISO, proximoVencimento, lerLinhaDigitavel, formatarLinha, soDigitos, vencimentosMensais,
+  hojeISO, proximoVencimento, lerLinhaDigitavel, formatarLinha, soDigitos, vencimentosMensais, clienteDe, chaveCliente,
 } from './calc.js';
+
+// Campo de cliente em texto livre, sugerindo os nomes já usados.
+function nomesDeClientes() {
+  const vistos = new Map();
+  for (const x of [...D.fretes, ...D.recebimentos, ...D.clientes.map(c => ({ cliente_nome: c.nome }))]) {
+    const nome = clienteDe(D, x);
+    if (nome && !vistos.has(chaveCliente(nome))) vistos.set(chaveCliente(nome), nome);
+  }
+  return [...vistos.values()].sort((a, b) => a.localeCompare(b));
+}
+function campoCliente(nome, valor) {
+  return campo({ nome, rotulo: 'Cliente (opcional)', valor, ajuda: 'cliente',
+    attrs: `list="lista-clientes" autocomplete="off" placeholder="Ex.: Cooperativa Sul"` })
+    + `<datalist id="lista-clientes">${nomesDeClientes().map(n => `<option value="${esc(n)}">`).join('')}</datalist>`;
+}
 
 export const CATEGORIAS = [
   ['diesel', 'Diesel'], ['pedagio', 'Pedágio'], ['alimentacao', 'Alimentação'],
@@ -109,28 +124,6 @@ export function formCaminhao(c = null) {
   });
 }
 
-export function formCliente(cl = null) {
-  abrirFormulario({
-    titulo: cl ? 'Editar cliente' : 'Novo cliente',
-    html: `
-      ${campo({ nome: 'nome', rotulo: 'Nome', valor: cl?.nome, obrigatorio: true, attrs: 'placeholder="Ex.: Cooperativa Agro Sul"' })}
-      <div class="linha">
-        ${campo({ nome: 'documento', rotulo: 'CNPJ/CPF (opcional)', valor: cl?.documento })}
-        ${campo({ nome: 'telefone', rotulo: 'Telefone (opcional)', tipo: 'tel', valor: cl?.telefone })}
-      </div>
-      ${campo({ nome: 'observacao', rotulo: 'Observação', tipo: 'textarea', valor: cl?.observacao })}
-      ${cl ? caixa({ nome: 'ativo', rotulo: 'Cliente ativo', marcado: cl.ativo }) : ''}`,
-    async aoSalvar(form) {
-      const v = valoresDe(form);
-      exigir(v.nome, 'Preencha o nome.');
-      exigir(!D.clientes.some(x => x.nome.toLowerCase() === v.nome.toLowerCase() && x.id !== cl?.id), 'Já existe um cliente com esse nome.');
-      await S.salvarCliente(cl?.id, { nome: v.nome, documento: v.documento || null, telefone: v.telefone || null,
-        observacao: v.observacao || null, ativo: cl ? v.ativo : true });
-      concluir('Cliente salvo.');
-    },
-  });
-}
-
 export function formHodometro(c) {
   abrirFormulario({
     titulo: 'Corrigir hodômetro',
@@ -158,8 +151,7 @@ function camposFrete(f, dataPadrao) {
       ${campo({ nome: 'f_destino', rotulo: 'Destino da carga', valor: f?.destino })}
     </div>
     <div class="linha">
-      ${selecao({ nome: 'f_cliente_id', rotulo: 'Cliente', ajuda: 'cliente', vazio: 'Sem cliente',
-        opcoes: D.clientes.filter(c => c.ativo || c.id === f?.cliente_id).map(c => [c.id, c.nome]), valor: f?.cliente_id })}
+      ${campoCliente('f_cliente_nome', clienteDe(D, f))}
       ${campo({ nome: 'f_vencimento', rotulo: 'Vencimento do pagamento', tipo: 'date', valor: f?.vencimento, ajuda: 'vencimento' })}
     </div>
     <div class="segmentado" role="radiogroup" aria-label="Forma de cobrança">
@@ -199,7 +191,7 @@ function lerFrete(v, previa = false) {
   const peso_t = pesoDigitado === null ? null : Math.round(pesoEmToneladas(pesoDigitado, v.f_unidade) * 1000) / 1000;
   if (peso_t !== null) exigir(peso_t > 0, 'Peso muito pequeno.');
   const f = { data: v.f_data, origem: v.f_origem || null, destino: v.f_destino || null, modalidade, peso_t,
-    cliente_id: v.f_cliente_id || null, vencimento: v.f_vencimento || null };
+    cliente_id: null, cliente_nome: v.f_cliente_nome || null, vencimento: v.f_vencimento || null };
   if (modalidade === 'tonelada') {
     f.preco_t = numeroCampo(v.f_preco_t, 'o valor por tonelada', { obrigatorio: !previa, minimo: 0 });
     if (f.preco_t !== null) f.preco_t = centavos(f.preco_t) / 100;
@@ -344,20 +336,36 @@ function opcoesFretesAbertos(caminhaoId, incluirId) {
 }
 const dataBRc = iso => iso ? iso.split('-').reverse().join('/') : '';
 
-export function formRecebimento({ r = null, freteId = null, caminhaoId = null } = {}) {
+// Recebimento de um frete cadastrado ou avulso (dinheiro que entrou sem frete lançado,
+// ex.: frete por fora). O avulso conta como faturamento e recebido na data em que entrou.
+export function formRecebimento({ r = null, freteId = null, caminhaoId = null, avulso = false } = {}) {
   const fr = S.frete(r?.frete_id || freteId);
-  const cId = fr ? S.viagem(fr.viagem_id).caminhao_id : caminhaoId;
+  const ehAvulso = r ? !r.frete_id : avulso;
+  const cId = fr ? S.viagem(fr.viagem_id).caminhao_id : (r?.caminhao_id || caminhaoId);
+  const escolhe = !r && !fr; // pode alternar entre frete e avulso
   abrirFormulario({
     titulo: r ? 'Editar recebimento' : 'Novo recebimento',
     subtitulo: ' ',
     html: `
       ${fr ? `<input type="hidden" name="caminhao_id" value="${cId}">` : campoCaminhao(cId)}
-      ${fr ? `<input type="hidden" name="frete_id" value="${fr.id}">` : '<div data-fretes></div>'}
-      <p class="calculo" data-saldo></p>
+      ${escolhe ? `<div class="segmentado" role="radiogroup" aria-label="Tipo de recebimento">
+          <label><input type="radio" name="tipo" value="frete" ${ehAvulso ? '' : 'checked'}> De um frete cadastrado</label>
+          <label><input type="radio" name="tipo" value="avulso" ${ehAvulso ? 'checked' : ''}> Avulso (sem frete) ${iconeAjuda('recebimento_avulso')}</label>
+        </div>` : `<input type="hidden" name="tipo" value="${ehAvulso ? 'avulso' : 'frete'}">`}
+      <div data-tipo="frete">
+        ${fr ? `<input type="hidden" name="frete_id" value="${fr.id}">` : '<div data-fretes></div>'}
+        <p class="calculo" data-saldo></p>
+      </div>
+      <div data-tipo="avulso">
+        ${campo({ nome: 'descricao', rotulo: 'Do que é este dinheiro?', valor: r?.descricao, attrs: 'placeholder="Ex.: frete por fora Rio Verde → Goiânia"' })}
+        ${campoCliente('cliente_nome', clienteDe(D, r))}
+      </div>
       ${campo({ nome: 'valor', rotulo: 'Valor recebido (R$)', tipo: 'numero', valor: paraCampo(r?.valor), ajuda: 'recebido', obrigatorio: true })}
       ${campo({ nome: 'data', rotulo: 'Data do recebimento', tipo: 'date', valor: r?.data || hojeISO(), ajuda: 'data_recebimento', obrigatorio: true })}
       ${campo({ nome: 'observacao', rotulo: 'Observação', valor: r?.observacao })}`,
     aoMontar(form) {
+      const tipo = () => form.querySelector('[name=tipo]:checked')?.value || form.querySelector('[name=tipo]').value;
+      const mostrar = () => form.querySelectorAll('[data-tipo]').forEach(el => { el.hidden = el.dataset.tipo !== tipo(); });
       const saldo = () => {
         const f = S.frete(form.querySelector('[name=frete_id]')?.value);
         const el = form.querySelector('[data-saldo]');
@@ -365,29 +373,49 @@ export function formRecebimento({ r = null, freteId = null, caminhaoId = null } 
         const recebido = recebidoDoFrete(D, f.id, r?.id);
         el.innerHTML = `Frete ${moedaC(centavos(f.valor_bruto))} · já recebido ${moedaC(recebido)} · <strong>a receber ${moedaC(centavos(f.valor_bruto) - recebido)}</strong> ${iconeAjuda('a_receber')}`;
       };
-      if (!fr) {
-        ligarFaixa(form, id => {
-          const ops = id ? opcoesFretesAbertos(id, null) : [];
-          form.querySelector('[data-fretes]').innerHTML = ops.length
-            ? selecao({ nome: 'frete_id', rotulo: 'Frete', opcoes: ops, obrigatorio: true })
-            : `<p class="nota">${id ? 'Este caminhão não tem fretes com valor a receber.' : ''}</p>`;
-          form.querySelector('[name=frete_id]')?.addEventListener('change', saldo);
-          saldo();
-        });
-      } else {
+      form.querySelectorAll('[name=tipo]').forEach(el => el.addEventListener('change', mostrar));
+      if (fr) {
         form.closest('dialog').querySelector('.faixa-caminhao').innerHTML = faixa(cId);
         saldo();
+      } else {
+        ligarFaixa(form, id => {
+          const box = form.querySelector('[data-fretes]');
+          if (!box) return;
+          const ops = id ? opcoesFretesAbertos(id, null) : [];
+          box.innerHTML = ops.length
+            ? selecao({ nome: 'frete_id', rotulo: 'Frete', opcoes: ops, obrigatorio: true })
+            : `<p class="nota">${id ? 'Este caminhão não tem fretes com valor a receber. Para dinheiro sem frete lançado, escolha <strong>Avulso</strong>.' : ''}</p>`;
+          form.querySelector('[name=frete_id]')?.addEventListener('change', saldo);
+          saldo();
+          // Sem fretes em aberto: já sugere o avulso.
+          if (escolhe && id && !ops.length) {
+            form.querySelector('[name=tipo][value=avulso]').checked = true;
+          }
+          mostrar();
+        });
       }
+      mostrar();
     },
     async aoSalvar(form) {
       const v = valoresDe(form);
-      const f = S.frete(v.frete_id);
-      exigir(f, 'Escolha o frete.');
+      if (v.tipo === 'avulso') {
+        exigir(v.caminhao_id, 'Escolha o caminhão.');
+        exigir(v.descricao, 'Descreva do que é este dinheiro (ex.: frete por fora).');
+      }
       const valor = numeroCampo(v.valor, 'o valor', { obrigatorio: true, positivo: true });
       exigir(v.data, 'Preencha a data do recebimento.');
+      if (v.tipo === 'avulso') {
+        await S.salvarRecebimento(r?.id, { frete_id: null, caminhao_id: v.caminhao_id, cliente_id: null, cliente_nome: v.cliente_nome || null,
+          descricao: v.descricao, valor, data: v.data, observacao: v.observacao || null });
+        concluir('Recebimento avulso salvo.');
+        return;
+      }
+      const f = S.frete(v.frete_id);
+      exigir(f, 'Escolha o frete — ou marque Avulso para dinheiro sem frete lançado.');
       const falta = centavos(f.valor_bruto) - recebidoDoFrete(D, f.id, r?.id);
       exigir(centavos(valor) <= falta, `O valor ultrapassa o que falta receber deste frete (${moedaC(falta)}).`);
-      await S.salvarRecebimento(r?.id, { frete_id: f.id, valor, data: v.data, observacao: v.observacao || null });
+      await S.salvarRecebimento(r?.id, { frete_id: f.id, caminhao_id: null, cliente_id: null, cliente_nome: null, descricao: null,
+        valor, data: v.data, observacao: v.observacao || null });
       concluir('Recebimento salvo.');
     },
   });

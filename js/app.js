@@ -10,7 +10,7 @@ import { esc, moedaC, moeda, num, dataBR, rotuloCaminhao, confirmar, aviso } fro
 import {
   centavos, resumoViagem, resumoCaminhao, somarResumos, mediaReal, statusPlano,
   recebidoDoFrete, aReceberDoFrete, hojeISO, caminhaoDoFrete, receberPorCliente, fretesEmAberto,
-  boletosEmAberto, formatarLinha, diferencaDias,
+  boletosEmAberto, formatarLinha, diferencaDias, caminhaoDoRecebimento, clienteDe, chaveCliente,
 } from './calc.js';
 import { decifrarBackup } from './cripto.js';
 import { iniciarTutorial, deveMostrarTutorial } from './tour.js';
@@ -63,7 +63,7 @@ const placa = id => esc(S.caminhao(id)?.placa || '?');
 const rota = x => `${esc(x.origem || '?')} → ${esc(x.destino || '?')}`;
 const sinal = c => `<span class="${c < 0 ? 'neg' : ''}">${moedaC(c)}</span>`;
 const por = x => S.autor(x) ? ` · por ${esc(S.autor(x))}` : '';
-const nomeCliente = id => id ? esc(S.cliente(id)?.nome || '?') : 'Sem cliente';
+const nomeCliente = x => esc(clienteDe(D, x) || 'Sem cliente');
 
 // ---------------------------------------------------------------------------
 // Resumo
@@ -141,7 +141,7 @@ function alertasRecebimento(caminhoes) {
     <h2>Recebimentos atrasados ${iconeAjuda('atrasados')} <small>${moedaC(totalC)}</small></h2>
     <ul>${atrasados.slice(0, 5).map(({ f, faltaC }) => `<li class="alerta atrasada">
       <span class="selo atrasada">Atrasado</span>
-      <span><strong>${nomeCliente(f.cliente_id)}</strong> · ${moedaC(faltaC)}<br>
+      <span><strong>${nomeCliente(f)}</strong> · ${moedaC(faltaC)}<br>
         <small>${rota(f)} · venceu em ${dataBR(f.vencimento)} · <span class="placa">${placa(caminhaoDoFrete(D, f))}</span></small></span>
       <button class="btn mini" data-acao="receber-frete" data-id="${f.id}">Receber</button></li>`).join('')}</ul>
     ${atrasados.length > 5 ? `<p><a href="#/clientes">Ver todos (${atrasados.length})</a></p>` : ''}
@@ -302,7 +302,7 @@ function telaViagem(id) {
         <div class="linha-item">
           <div class="principal"><strong>${rota(f)}</strong>
             <small>${dataBR(f.data)} · ${f.modalidade === 'tonelada' ? `${num(f.peso_t, 3)} t × ${moeda(f.preco_t)}` : 'valor fechado' + (f.peso_t ? ` · ${num(f.peso_t, 3)} t` : '')}
-              · cliente ${f.cliente_id ? `<a href="#/clientes/${f.cliente_id}">${nomeCliente(f.cliente_id)}</a>` : 'não informado'}${f.vencimento ? ` · vence ${dataBR(f.vencimento)}` : ''}${por(f)}</small></div>
+              · cliente ${linkCliente(clienteDe(D, f))}${f.vencimento ? ` · vence ${dataBR(f.vencimento)}` : ''}${por(f)}</small></div>
           <div class="valor"><span>${moeda(f.valor_bruto)}</span><small>recebido ${moedaC(rec)} ${iconeAjuda('recebido')} · a receber ${moedaC(falta)} ${iconeAjuda('a_receber')}</small></div>
         </div>
         ${recs.length ? `<ul class="sublista">${recs.map(x => `<li>💰 ${dataBR(x.data)} · ${moeda(x.valor)}${x.observacao ? ' · ' + esc(x.observacao) : ''}${por(x)}
@@ -355,19 +355,23 @@ function telaLancamentos(aba = 'despesas') {
   } else if (aba === 'recebimentos') {
     botao = '<button class="btn" data-acao="novo-recebimento">+ Recebimento</button>';
     const lista = S.ordenarPorData(D.recebimentos.filter(r => {
-      const f = S.frete(r.frete_id);
-      return f && (!filtro.caminhao || caminhaoDoFrete(D, f) === filtro.caminhao) && noIntervalo(r.data, per);
+      const cam = caminhaoDoRecebimento(D, r);
+      return cam && (!filtro.caminhao || cam === filtro.caminhao) && noIntervalo(r.data, per);
     }));
-    corpo = lista.length ? `<ul class="lista">${lista.map(r => {
-      const f = S.frete(r.frete_id);
+    const totalC = lista.reduce((s, r) => s + centavos(r.valor), 0);
+    corpo = `<p class="periodo">Total recebido no período: <strong>${moedaC(totalC)}</strong> ${iconeAjuda('recebido')}</p>` + (lista.length ? `<ul class="lista">${lista.map(r => {
+      const f = r.frete_id && S.frete(r.frete_id);
+      const detalhe = f
+        ? `${nomeCliente(f)} · frete de ${dataBR(f.data)} (${moeda(f.valor_bruto)})`
+        : `<span class="selo">Avulso</span> ${clienteDe(D, r) ? nomeCliente(r) : 'sem frete lançado'}`;
       return `<li class="item">
-        <div class="principal"><strong>${rota(f)}</strong> <span class="placa">${placa(caminhaoDoFrete(D, f))}</span>
-          <small>recebido em ${dataBR(r.data)} · ${nomeCliente(f.cliente_id)} · frete de ${dataBR(f.data)} (${moeda(f.valor_bruto)})${r.observacao ? ' · ' + esc(r.observacao) : ''}${por(r)} · <a href="#/viagens/${f.viagem_id}">ver viagem</a></small></div>
+        <div class="principal"><strong>${f ? rota(f) : esc(r.descricao || 'Recebimento avulso')}</strong> <span class="placa">${placa(caminhaoDoRecebimento(D, r))}</span>
+          <small>recebido em ${dataBR(r.data)} · ${detalhe}${r.observacao ? ' · ' + esc(r.observacao) : ''}${por(r)}${f ? ` · <a href="#/viagens/${f.viagem_id}">ver viagem</a>` : ''}</small></div>
         <div class="valor"><span>${moeda(r.valor)}</span></div>
         <div class="acoes"><button class="btn mini sec" data-acao="editar-recebimento" data-id="${r.id}">Editar</button>
           <button class="btn mini perigo" data-acao="apagar-recebimento" data-id="${r.id}">Apagar</button></div>
       </li>`;
-    }).join('')}</ul>` : vazio('Nenhum recebimento no período.');
+    }).join('')}</ul>` : vazio('Nenhum recebimento no período.'));
   } else {
     botao = '<button class="btn" data-acao="nova-despesa">+ Despesa</button>';
     const lista = S.ordenarPorData(D.despesas.filter(x => doCaminhaoFiltrado(x) && noIntervalo(x.data_gasto, per)), 'data_gasto');
@@ -421,34 +425,32 @@ function telaManutencoes() {
 // ---------------------------------------------------------------------------
 // Clientes
 // ---------------------------------------------------------------------------
+const linkCliente = nome => nome ? `<a href="#/clientes/${encodeURIComponent(nome)}">${esc(nome)}</a>` : 'não informado';
+
+// Clientes não têm cadastro: a lista vem dos nomes digitados nos fretes.
 function telaClientes() {
-  const abertos = new Map(receberPorCliente(D).map(x => [x.clienteId || '', x]));
-  const semCliente = abertos.get('');
-  const lista = [...D.clientes].sort((a, b) =>
-    (abertos.get(b.id)?.aReceberC || 0) - (abertos.get(a.id)?.aReceberC || 0) || a.nome.localeCompare(b.nome));
-  const totalC = [...abertos.values()].reduce((s, x) => s + x.aReceberC, 0);
-  const atrasadoC = [...abertos.values()].reduce((s, x) => s + x.atrasadoC, 0);
-  return `<div class="titulo"><h1>Clientes</h1><button class="btn" data-acao="novo-cliente">+ Cliente</button></div>
+  const lista = receberPorCliente(D);
+  const totalC = lista.reduce((s, x) => s + x.aReceberC, 0);
+  const atrasadoC = lista.reduce((s, x) => s + x.atrasadoC, 0);
+  return `<h1>Clientes</h1>
+    <p class="nota">Não precisa cadastrar: digite o nome do cliente no frete. Aqui aparece quanto cada um ainda deve. ${iconeAjuda('cliente')}</p>
     <dl class="ficha">
       <div><dt>A receber (todos) ${iconeAjuda('a_receber')}</dt><dd>${moedaC(totalC)}</dd></div>
       <div><dt>Atrasado ${iconeAjuda('atrasados')}</dt><dd class="${atrasadoC ? 'neg' : ''}">${moedaC(atrasadoC)}</dd></div>
     </dl>
-    ${lista.length || semCliente ? `<ul class="lista">${lista.map(cl => {
-      const x = abertos.get(cl.id);
-      return `<li class="item ${cl.ativo ? '' : 'inativo'}"><a class="principal" href="#/clientes/${cl.id}">
-          <strong>${esc(cl.nome)}</strong> ${cl.ativo ? '' : '<span class="selo">Desativado</span>'}
-          <small>${[cl.documento, cl.telefone].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</small></a>
-        <div class="valor"><span>${moedaC(x?.aReceberC || 0)}</span><small>${x?.atrasadoC ? `<span class="neg">${moedaC(x.atrasadoC)} atrasado</span>` : 'a receber'}</small></div>
-      </li>`;
-    }).join('')}${semCliente ? `<li class="item"><div class="principal"><strong>Fretes sem cliente</strong><small>${semCliente.fretes.length} frete(s) em aberto</small></div>
-        <div class="valor"><span>${moedaC(semCliente.aReceberC)}</span><small>${semCliente.atrasadoC ? `<span class="neg">${moedaC(semCliente.atrasadoC)} atrasado</span>` : 'a receber'}</small></div></li>` : ''}</ul>`
-      : vazio('Nenhum cliente cadastrado. Cadastre e escolha o cliente ao lançar o frete.')}`;
+    ${lista.length ? `<ul class="lista">${lista.map(x => `<li class="item">
+        ${x.nome ? `<a class="principal" href="#/clientes/${encodeURIComponent(x.nome)}"><strong>${esc(x.nome)}</strong>`
+                 : '<div class="principal"><strong>Fretes sem cliente informado</strong>'}
+          <small>${x.fretes.length} frete(s) em aberto</small>${x.nome ? '</a>' : '</div>'}
+        <div class="valor"><span>${moedaC(x.aReceberC)}</span><small>${x.atrasadoC ? `<span class="neg">${moedaC(x.atrasadoC)} atrasado</span>` : 'a receber'}</small></div>
+      </li>`).join('')}</ul>` : vazio('Nenhum valor a receber. 👍')}`;
 }
 
-function telaCliente(id) {
-  const cl = S.cliente(id);
-  if (!cl) return vazio('Cliente não encontrado.');
-  const fretes = S.ordenarPorData(D.fretes.filter(f => f.cliente_id === id));
+function telaCliente(nomeUrl) {
+  const nome = decodeURIComponent(nomeUrl);
+  const k = chaveCliente(nome);
+  const fretes = S.ordenarPorData(D.fretes.filter(f => chaveCliente(clienteDe(D, f)) === k));
+  const avulsos = S.ordenarPorData(D.recebimentos.filter(r => !r.frete_id && chaveCliente(clienteDe(D, r)) === k));
   const hoje = hojeISO();
   const totais = fretes.reduce((t, f) => {
     const falta = aReceberDoFrete(D, f);
@@ -457,10 +459,7 @@ function telaCliente(id) {
     return t;
   }, { bruto: 0, falta: 0, atrasado: 0 });
   return `<p><a href="#/clientes">← Clientes</a></p>
-    <div class="titulo"><h1>${esc(cl.nome)}</h1>
-      <div class="acoes"><button class="btn sec" data-acao="editar-cliente" data-id="${id}">Editar</button>
-        ${fretes.length ? '' : `<button class="btn perigo" data-acao="apagar-cliente" data-id="${id}">Apagar</button>`}</div></div>
-    ${cl.documento || cl.telefone || cl.observacao ? `<p class="nota">${[cl.documento, cl.telefone, cl.observacao].filter(Boolean).map(esc).join(' · ')}</p>` : ''}
+    <h1>${esc(nome)}</h1>
     <dl class="ficha">
       <div><dt>Total em fretes</dt><dd>${moedaC(totais.bruto)}</dd></div>
       <div><dt>A receber ${iconeAjuda('a_receber')}</dt><dd>${moedaC(totais.falta)}</dd></div>
@@ -476,7 +475,11 @@ function telaCliente(id) {
         <div class="valor"><span>${moeda(f.valor_bruto)}</span><small>${falta > 0 ? 'falta ' + moedaC(falta) : 'recebido'}</small></div>
         ${falta > 0 ? `<div class="acoes"><button class="btn mini" data-acao="receber-frete" data-id="${f.id}">+ Recebimento</button></div>` : ''}
       </li>`;
-    }).join('')}</ul>` : vazio('Nenhum frete deste cliente.')}`;
+    }).join('')}</ul>` : vazio('Nenhum frete deste cliente.')}
+    ${avulsos.length ? `<h2>Recebimentos avulsos</h2><ul class="lista">${avulsos.map(r => `<li class="item">
+        <div class="principal"><strong>${esc(r.descricao || 'Recebimento avulso')}</strong> <span class="placa">${placa(r.caminhao_id)}</span>
+          <small>recebido em ${dataBR(r.data)}${por(r)}</small></div>
+        <div class="valor"><span>${moeda(r.valor)}</span></div></li>`).join('')}</ul>` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -610,6 +613,7 @@ const ACOES = {
   'apagar-frete': id => apagarCom('Apagar este frete e os recebimentos dele?', () => S.apagarFrete(id)),
   'receber-frete': id => F.formRecebimento({ freteId: id }),
   'novo-recebimento': () => F.formRecebimento({ caminhaoId: filtro.caminhao || null }),
+  'novo-recebimento-avulso': () => F.formRecebimento({ caminhaoId: filtro.caminhao || null, avulso: true }),
   'editar-recebimento': id => F.formRecebimento({ r: D.recebimentos.find(r => r.id === id) }),
   'apagar-recebimento': id => apagarCom('Apagar este recebimento?', () => S.apagar('recebimentos', id)),
   'nova-despesa': () => F.formDespesa({ caminhaoId: filtro.caminhao || null }),
@@ -636,11 +640,6 @@ const ACOES = {
   },
   'exemplo': async () => { await carregarExemplo(); aviso('Exemplo carregado.'); location.hash = '#/resumo'; },
   'sair': async () => { await db.sair(); location.reload(); },
-  'novo-cliente': () => F.formCliente(),
-  'editar-cliente': id => F.formCliente(S.cliente(id)),
-  'apagar-cliente': id => apagarCom('Apagar este cliente? Ele não tem fretes.', async () => {
-    await S.apagar('clientes', id); location.hash = '#/clientes';
-  }),
   'baixar-excel': async () => {
     aviso('Gerando planilha…', 'info');
     const { baixarExcel } = await import('./relatorio.js');
@@ -706,7 +705,8 @@ document.addEventListener('change', async e => {
 // Navegação
 // ---------------------------------------------------------------------------
 async function render() {
-  const [, rota = 'resumo', id] = (location.hash || '#/resumo').split('/');
+  const [, rota = 'resumo', ...resto] = (location.hash || '#/resumo').split('/');
+  const id = resto.join('/');
   const noMais = ['boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
   document.querySelectorAll('.menu a').forEach(a => {
     const href = a.getAttribute('href');
@@ -880,7 +880,7 @@ async function iniciarSessao() {
   try {
     await S.recarregar();
   } catch (err) {
-    const bancoDesatualizado = /clientes|criado_por|cliente_id|vencimento|schema cache/.test(err.message);
+    const bancoDesatualizado = /clientes|criado_por|cliente_id|cliente_nome|vencimento|schema cache/.test(err.message);
     $conteudo().innerHTML = bancoDesatualizado
       ? `<div class="banner erro"><strong>O banco precisa ser atualizado.</strong> No Supabase, abra o SQL Editor, cole o arquivo supabase/schema.sql inteiro e clique em Run. Depois recarregue esta página.</div>`
       : `<div class="banner erro">Não foi possível carregar os dados: ${esc(err.message)}</div>`;

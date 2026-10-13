@@ -18,12 +18,12 @@ const PASSOS = [
     texto: 'Sempre que tiver dúvida sobre um campo ou um número, toque no <strong>?</strong> ao lado dele. Ele explica com um exemplo.' },
   { alvo: ['[data-acao="novo-caminhao"]'], rota: 'caminhoes', titulo: '1º passo: cadastrar os caminhões',
     texto: 'Em <strong>Caminhões → + Caminhão</strong>, informe modelo, placa, o <strong>hodômetro atual</strong> (km do painel) e a <strong>média de consumo</strong> (km por litro). Caminhão vendido ou parado? Use <strong>Desativar</strong>: some dos lançamentos, mas o histórico fica.' },
-  { alvo: ['[data-acao="novo-cliente"]'], rota: 'clientes', titulo: 'Clientes',
-    texto: 'Cadastre quem contrata os fretes. Assim você vê <strong>quanto cada cliente deve</strong> e quais pagamentos estão <strong>atrasados</strong>.' },
+  { alvo: ['.ficha', '#conteudo'], rota: 'clientes', titulo: 'Clientes',
+    texto: 'Não precisa cadastrar cliente: é só <strong>digitar o nome no frete</strong>. Aqui você vê <strong>quanto cada cliente deve</strong> e quais pagamentos estão <strong>atrasados</strong>.' },
   { alvo: ['[data-acao="nova-viagem"]'], rota: 'viagens', titulo: 'Viagens e fretes',
     texto: 'Em <strong>+ Viagem</strong>: caminhão, datas, origem/destino, <strong>km inicial e final</strong> e o primeiro frete (peso × valor por tonelada, ou valor fechado), com cliente e vencimento. O sistema calcula o <strong>diesel estimado</strong> e o <strong>resultado da viagem</strong>. Dentro da viagem você adiciona mais fretes, despesas da viagem e os <strong>recebimentos</strong> (pode ser parcial).' },
   { alvo: ['.abas', '#conteudo'], rota: 'lancamentos', titulo: 'Lançamentos',
-    texto: 'Três abas: <strong>Despesas</strong> (pedágio, alimentação, pneus, comissão…), <strong>Abastecimentos</strong> (litros, preço e hodômetro; marque "tanque completo" para calcular o consumo real) e <strong>Recebimentos</strong> (dinheiro que entrou de cada frete).' },
+    texto: 'Três abas: <strong>Despesas</strong> (pedágio, alimentação, pneus, comissão…), <strong>Abastecimentos</strong> (litros, preço e hodômetro; marque "tanque completo" para calcular o consumo real) e <strong>Recebimentos</strong> (dinheiro que entrou de um frete — ou <strong>avulso</strong>, para frete por fora sem lançamento).' },
   { alvo: ['[data-acao="novo-boleto"]'], rota: 'boletos', titulo: 'Boletos a pagar',
     texto: 'Em <strong>+ Boleto</strong>, cole o código do boleto: o vencimento e o valor são preenchidos sozinhos. Para financiamento, informe o nº de parcelas. Quando pagar, use <strong>Marcar como pago</strong>. O sistema avisa o que vence na semana.' },
   { alvo: ['[data-acao="novo-plano"]'], rota: 'manutencoes', titulo: 'Manutenção',
@@ -33,7 +33,7 @@ const PASSOS = [
   { alvo: ['[data-acao="exportar"]', '#conteudo'], rota: 'dados', titulo: 'Dados e conta',
     texto: 'Baixe uma <strong>cópia de segurança</strong>, troque sua senha e reveja este tutorial quando quiser.' },
   { titulo: 'Pronto! 🎉',
-    texto: 'Sugestão para começar: <strong>1)</strong> cadastre os caminhões, <strong>2)</strong> os clientes, <strong>3)</strong> lance a primeira viagem. Qualquer dúvida, toque no <strong>?</strong>. Boa estrada!' },
+    texto: 'Sugestão para começar: <strong>1)</strong> cadastre os caminhões, <strong>2)</strong> lance a primeira viagem com o frete, <strong>3)</strong> registre despesas e abastecimentos. Qualquer dúvida, toque no <strong>?</strong>. Boa estrada!' },
 ];
 
 let indice = 0, camada, buraco, cartao, aoTerminar = null;
