@@ -322,3 +322,8 @@ main .faixa-caminhao { border-radius: 8px; border: 1px solid var(--borda); margi
   .cartao, .tile { box-shadow: none; break-inside: avoid; }
   .grade-graficos { grid-template-columns: 1fr 1fr; }
 }
+
+/* Boletos */
+.linha-digitavel { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; letter-spacing: .02em; overflow-wrap: anywhere; }
+.pagos summary { cursor: pointer; color: var(--link); margin: 14px 0 8px; font-weight: 600; }
+h2 small { font-weight: 600; color: var(--suave); }

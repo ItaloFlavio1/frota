@@ -38,6 +38,11 @@ export const AJUDA = {
   custo_km_periodo: ['custo por km', 'Despesas registradas no período ÷ km rodados nas viagens do período (pela data de saída).'],
   km_rodados: ['km rodados', 'Soma das distâncias das viagens (km final − km inicial), pela data de saída. Viagens sem km final não entram.'],
   preco_medio_diesel: ['preço médio do diesel', 'Total pago em abastecimentos ÷ litros abastecidos.'],
+  boleto: ['boleto', 'Marque para contas com data de vencimento (parcela do caminhão, oficina, seguro…). Elas aparecem na tela Boletos e avisam quando vão vencer.'],
+  linha_digitavel: ['código do boleto', 'Os números embaixo ou em cima do código de barras. Ao colar, o sistema lê o vencimento e o valor sozinho. Pode deixar em branco.'],
+  vencimento_boleto: ['vencimento', 'Último dia para pagar sem juros. Boletos não pagos aparecem como atrasados depois desta data.'],
+  parcelas: ['parcelas', 'Para compras parceladas: o sistema cria uma conta por mês, a partir do 1º vencimento. Exemplo: 10 parcelas de R$ 1.500, a 1ª em 10/11.'],
+  boletos_vencer: ['boletos a pagar', 'Boletos ainda não pagos que já venceram ou vencem nos próximos 7 dias.'],
   status_viagem: ['situação da viagem', 'Planejada, em andamento, concluída ou cancelada. Serve para organizar a lista.'],
 };
 

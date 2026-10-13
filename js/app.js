@@ -10,6 +10,7 @@ import { esc, moedaC, moeda, num, dataBR, rotuloCaminhao, confirmar, aviso } fro
 import {
   centavos, resumoViagem, resumoCaminhao, somarResumos, mediaReal, statusPlano,
   recebidoDoFrete, aReceberDoFrete, hojeISO, caminhaoDoFrete, receberPorCliente, fretesEmAberto,
+  boletosEmAberto, formatarLinha, diferencaDias,
 } from './calc.js';
 import { decifrarBackup } from './cripto.js';
 
@@ -97,6 +98,38 @@ function alertasManutencao(caminhoes) {
   </section>`;
 }
 
+function alertasBoletos(caminhoes) {
+  const ids = new Set(caminhoes.map(c => c.id));
+  const { vencidos, proximos } = boletosEmAberto(D);
+  const lista = [...vencidos, ...proximos].filter(x => ids.has(x.caminhao_id));
+  if (!lista.length) return '';
+  const totalC = lista.reduce((s, x) => s + centavos(x.valor), 0);
+  return `<section class="alertas" aria-label="Boletos a pagar">
+    <h2>Boletos a pagar ${iconeAjuda('boletos_vencer')} <small>${moedaC(totalC)}</small></h2>
+    <ul>${lista.slice(0, 5).map(x => itemBoletoAlerta(x)).join('')}</ul>
+    <p><a href="#/boletos">Ver todos os boletos</a></p>
+  </section>`;
+}
+
+function prazoBoleto(x) {
+  const dias = diferencaDias(hojeISO(), x.vencimento);
+  if (dias < 0) return { classe: 'atrasada', selo: 'Vencido', texto: `venceu há ${-dias} dia(s)` };
+  if (dias === 0) return { classe: 'proxima', selo: 'Vence hoje', texto: 'vence hoje' };
+  return { classe: dias <= 7 ? 'proxima' : 'em_dia', selo: dias <= 7 ? 'Vence em breve' : 'A vencer', texto: `vence em ${dias} dia(s)` };
+}
+
+const nomeBoleto = x => esc(x.fornecedor || x.descricao || nomeCategoria(x.categoria))
+  + (x.total_parcelas > 1 ? ` <small>(${x.parcela}/${x.total_parcelas})</small>` : '');
+
+function itemBoletoAlerta(x) {
+  const p = prazoBoleto(x);
+  return `<li class="alerta ${p.classe}">
+    <span class="selo ${p.classe}">${p.selo}</span>
+    <span><strong>${nomeBoleto(x)}</strong> · ${moeda(x.valor)}<br>
+      <small>${dataBR(x.vencimento)} · ${p.texto} · <span class="placa">${placa(x.caminhao_id)}</span></small></span>
+    <button class="btn mini" data-acao="pagar-boleto" data-id="${x.id}">Pagar</button></li>`;
+}
+
 function alertasRecebimento(caminhoes) {
   const ids = new Set(caminhoes.map(c => c.id));
   const atrasados = fretesEmAberto(D).filter(x => x.atrasado && ids.has(caminhaoDoFrete(D, x.f)))
@@ -128,6 +161,7 @@ function telaResumo() {
     ${barraFiltros()}
     <p class="periodo">Período: ${txtPer}</p>
     ${alertasManutencao(caminhoes)}
+    ${alertasBoletos(caminhoes)}
     ${alertasRecebimento(caminhoes)}
     <div class="grade-cartoes">
       ${resumos.map(({ c, r }) => {
@@ -286,7 +320,7 @@ function listaDespesas(lista) {
     return `<li class="item">
       <div class="principal"><strong>${nomeCategoria(x.categoria)}</strong> <span class="placa">${placa(x.caminhao_id)}</span>
         <small>${dataBR(x.data_gasto)}${x.descricao ? ' · ' + esc(x.descricao) : ''}${vg ? ` · viagem <a href="#/viagens/${vg.id}">${rota(vg)}</a>` : ''}${origem ? ` · gerada por ${origem}` : ''}${por(x)}</small></div>
-      <div class="valor"><span>${moeda(x.valor)}</span><small>${x.pago ? 'pago em ' + dataBR(x.data_pagamento) : '<span class="pendente">pendente</span>'}</small></div>
+      <div class="valor"><span>${moeda(x.valor)}</span><small>${x.pago ? 'pago em ' + dataBR(x.data_pagamento) : `<span class="pendente">${x.vencimento ? 'vence ' + dataBR(x.vencimento) : 'pendente'}</span>`}${x.total_parcelas > 1 ? ` · ${x.parcela}/${x.total_parcelas}` : ''}</small></div>
       ${origem ? '' : `<div class="acoes"><button class="btn mini sec" data-acao="editar-despesa" data-id="${x.id}">Editar</button>
         <button class="btn mini perigo" data-acao="apagar-despesa" data-id="${x.id}">Apagar</button></div>`}
     </li>`;
@@ -434,8 +468,50 @@ function telaCliente(id) {
     }).join('')}</ul>` : vazio('Nenhum frete deste cliente.')}`;
 }
 
+// ---------------------------------------------------------------------------
+// Boletos
+// ---------------------------------------------------------------------------
+function itemBoleto(x) {
+  const p = x.pago ? null : prazoBoleto(x);
+  return `<li class="item">
+    <div class="principal"><strong>${nomeBoleto(x)}</strong> <span class="placa">${placa(x.caminhao_id)}</span>
+      ${p ? `<span class="selo ${p.classe}">${p.selo}</span>` : '<span class="selo ok">Pago</span>'}
+      <small>${nomeCategoria(x.categoria)}${x.descricao && x.fornecedor ? ' · ' + esc(x.descricao) : ''} · vence ${dataBR(x.vencimento)}${p ? ' · ' + p.texto : ` · pago em ${dataBR(x.data_pagamento)}`}${por(x)}</small>
+      ${x.linha_digitavel ? `<small class="linha-digitavel">${formatarLinha(x.linha_digitavel)}</small>` : ''}</div>
+    <div class="valor"><span>${moeda(x.valor)}</span></div>
+    <div class="acoes">
+      ${x.linha_digitavel && !x.pago ? `<button class="btn mini sec" data-acao="copiar-linha" data-id="${x.id}">Copiar código</button>` : ''}
+      ${x.pago ? '' : `<button class="btn mini" data-acao="pagar-boleto" data-id="${x.id}">Marcar como pago</button>`}
+      <button class="btn mini sec" data-acao="editar-despesa" data-id="${x.id}">Editar</button>
+      <button class="btn mini perigo" data-acao="apagar-despesa" data-id="${x.id}">Apagar</button>
+      ${x.grupo_parcelas && !x.pago ? `<button class="btn mini perigo" data-acao="apagar-parcelas" data-id="${x.grupo_parcelas}">Apagar parcelas em aberto</button>` : ''}
+    </div>
+  </li>`;
+}
+
+function telaBoletos() {
+  const doFiltro = x => !filtro.caminhao || x.caminhao_id === filtro.caminhao;
+  const { vencidos, proximos, depois } = boletosEmAberto(D);
+  const [v, p, d] = [vencidos, proximos, depois].map(l => l.filter(doFiltro));
+  const soma = l => l.reduce((s, x) => s + centavos(x.valor), 0);
+  const pagos = S.ordenarPorData(D.despesas.filter(x => x.pago && x.vencimento && doFiltro(x)), 'data_pagamento').slice(0, 20);
+  const secao = (titulo, lista, msg) => `<h2>${titulo} ${lista.length ? `<small>${moedaC(soma(lista))}</small>` : ''}</h2>
+    ${lista.length ? `<ul class="lista">${lista.map(itemBoleto).join('')}</ul>` : vazio(msg)}`;
+  return `<div class="titulo"><h1>Boletos</h1><button class="btn" data-acao="novo-boleto">+ Boleto</button></div>
+    ${barraFiltros({ periodo: false })}
+    <dl class="ficha">
+      <div><dt>Vencidos</dt><dd class="${v.length ? 'neg' : ''}">${moedaC(soma(v))}</dd></div>
+      <div><dt>Próximos 7 dias ${iconeAjuda('boletos_vencer')}</dt><dd>${moedaC(soma(p))}</dd></div>
+      <div><dt>Total em aberto</dt><dd>${moedaC(soma([...v, ...p, ...d]))}</dd></div>
+    </dl>
+    ${secao('Vencidos', v, 'Nenhum boleto vencido. 👍')}
+    ${secao('Vencem nos próximos 7 dias', p, 'Nada vencendo nesta semana.')}
+    ${secao('Mais adiante', d, 'Nenhum outro boleto em aberto.')}
+    ${pagos.length ? `<details class="pagos"><summary>Pagos recentemente (${pagos.length})</summary><ul class="lista">${pagos.map(itemBoleto).join('')}</ul></details>` : ''}`;
+}
+
 function telaMais() {
-  const itens = [['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['dados', '💾', 'Dados, backup e conta']];
+  const itens = [['boletos', '📄', 'Boletos'], ['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['dados', '💾', 'Dados, backup e conta']];
   return `<h1>Mais</h1><ul class="lista">${itens.map(([h, i, t]) =>
     `<li class="item"><a class="principal" href="#/${h}"><strong><span aria-hidden="true">${i}</span> ${t}</strong></a></li>`).join('')}</ul>`;
 }
@@ -546,6 +622,15 @@ const ACOES = {
     await baixarExcel({ ano: Number(filtro.ano) || Number(hojeISO().slice(0, 4)), caminhao: filtro.caminhao });
   },
   'imprimir': () => print(),
+  'novo-boleto': () => F.formDespesa({ caminhaoId: filtro.caminhao || null, boleto: true }),
+  'pagar-boleto': id => F.formPagarBoleto(D.despesas.find(x => x.id === id)),
+  'copiar-linha': async id => {
+    const x = D.despesas.find(x => x.id === id);
+    await navigator.clipboard.writeText(x.linha_digitavel);
+    aviso('Código copiado. Cole no app do banco.');
+  },
+  'apagar-parcelas': grupo => apagarCom('Apagar todas as parcelas <strong>ainda não pagas</strong> deste parcelamento? As pagas continuam no histórico.',
+    () => S.apagarParcelasEmAberto(grupo)),
   'trocar-senha': () => telaNovaSenha(true),
 };
 
@@ -596,7 +681,7 @@ document.addEventListener('change', async e => {
 // ---------------------------------------------------------------------------
 async function render() {
   const [, rota = 'resumo', id] = (location.hash || '#/resumo').split('/');
-  const noMais = ['caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
+  const noMais = ['boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
   document.querySelectorAll('.menu a').forEach(a => {
     const href = a.getAttribute('href');
     a.toggleAttribute('aria-current', href === '#/' + rota || (href === '#/mais' && noMais));
@@ -606,6 +691,7 @@ async function render() {
     resumo: telaResumo,
     painel: () => telaPainel(filtro),
     clientes: () => id ? telaCliente(id) : telaClientes(),
+    boletos: telaBoletos,
     mais: telaMais,
     caminhoes: () => id ? telaCaminhao(id) : telaCaminhoes(),
     viagens: () => id ? telaViagem(id) : telaViagens(),

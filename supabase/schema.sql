@@ -294,3 +294,18 @@ begin
                     default (auth.jwt() ->> ''email'')', t);
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- Versão 3: boletos / contas a pagar (são despesas com vencimento)
+-- ---------------------------------------------------------------------
+alter table despesas add column if not exists fornecedor text;
+alter table despesas add column if not exists vencimento date;
+alter table despesas add column if not exists linha_digitavel text;
+alter table despesas add column if not exists grupo_parcelas uuid;
+alter table despesas add column if not exists parcela int;
+alter table despesas add column if not exists total_parcelas int;
+create index if not exists idx_desp_vencimento on despesas(vencimento) where not pago;
+
+alter table despesas drop constraint if exists despesas_categoria_check;
+alter table despesas add constraint despesas_categoria_check check (categoria in
+  ('diesel','pedagio','alimentacao','manutencao','pneus','comissao','financiamento','seguro','impostos','outros'));

@@ -93,6 +93,34 @@ const mr = C.mediaReal(abs);
 ok('média real inclui abastecimento parcial', [mr.km, mr.litros, mr.geral], [1000, 400, 2.5]);
 ok('sem dois tanques cheios: dados insuficientes', C.mediaReal(abs.slice(0, 2)), null);
 
+// Boletos
+function dv10(n) { let s = 0, p = 2; for (let i = n.length - 1; i >= 0; i--) { let x = +n[i] * p; s += x > 9 ? x - 9 : x; p = p === 2 ? 1 : 2; } return (10 - s % 10) % 10; }
+function montarLinha(vencimento, valor) {
+  const fator = 1000 + C.diferencaDias('2025-02-22', vencimento);
+  const livre = '1234567890123456789012345';
+  const c1 = '0019' + livre.slice(0, 5), c2 = livre.slice(5, 15), c3 = livre.slice(15, 25);
+  return c1 + dv10(c1) + c2 + dv10(c2) + c3 + dv10(c3) + '1' + String(fator) + String(Math.round(valor * 100)).padStart(10, '0');
+}
+const linha = montarLinha('2026-11-10', 1530.25);
+const lido = C.lerLinhaDigitavel(linha, '2026-10-13');
+ok('boleto: 47 dígitos lidos', [lido.tipo, lido.dvOk], ['bancario', true]);
+ok('boleto: vencimento lido do código', lido.vencimento, '2026-11-10');
+ok('boleto: valor lido do código', lido.valor, 1530.25);
+ok('boleto: aceita pontos e espaços', C.lerLinhaDigitavel(C.formatarLinha(linha), '2026-10-13').valor, 1530.25);
+ok('boleto: dígito errado é detectado', C.lerLinhaDigitavel('1' + linha.slice(1), '2026-10-13').dvOk, false);
+ok('boleto: código curto não é lido', C.lerLinhaDigitavel('123'), null);
+ok('parcelas mensais respeitam fim do mês', C.vencimentosMensais('2026-01-31', 4), ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+ok('parcelas viram o ano', C.vencimentosMensais('2026-11-10', 3), ['2026-11-10', '2026-12-10', '2027-01-10']);
+const bd = { despesas: [
+  { id: 'b1', pago: false, vencimento: '2026-10-01', valor: 100 },
+  { id: 'b2', pago: false, vencimento: '2026-10-15', valor: 200 },
+  { id: 'b3', pago: false, vencimento: '2026-12-01', valor: 300 },
+  { id: 'b4', pago: true, vencimento: '2026-10-02', valor: 400 },
+  { id: 'b5', pago: false, vencimento: null, valor: 500 },
+] };
+const ab = C.boletosEmAberto(bd, '2026-10-13');
+ok('boletos: vencidos / 7 dias / depois', [ab.vencidos.map(x => x.id), ab.proximos.map(x => x.id), ab.depois.map(x => x.id)], [['b1'], ['b2'], ['b3']]);
+
 linhas.push('', falhas ? `${falhas} FALHA(S)` : 'TODOS OS TESTES PASSARAM');
 document.getElementById('saida').textContent = linhas.join('\n');
 </script>

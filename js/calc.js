@@ -255,3 +255,77 @@ export function receberPorCliente(d, hoje = hojeISO()) {
   }
   return [...porCliente.values()].sort((a, b) => b.aReceberC - a.aReceberC);
 }
+
+// ---------------------------------------------------------------------------
+// Boletos
+// ---------------------------------------------------------------------------
+export const soDigitos = s => String(s || '').replace(/\D/g, '');
+
+function mod10(numero) {
+  let soma = 0, peso = 2;
+  for (let i = numero.length - 1; i >= 0; i--) {
+    let p = Number(numero[i]) * peso;
+    soma += p > 9 ? p - 9 : p;
+    peso = peso === 2 ? 1 : 2;
+  }
+  return (10 - (soma % 10)) % 10;
+}
+
+// Lê a linha digitável: boleto bancário (47 dígitos) traz vencimento e valor;
+// conta de consumo/tributo (48 dígitos, começa com 8) traz só o valor.
+export function lerLinhaDigitavel(texto, hoje = hojeISO()) {
+  const n = soDigitos(texto);
+  if (n.length === 47) {
+    const dvOk = mod10(n.slice(0, 9)) === Number(n[9]) && mod10(n.slice(10, 20)) === Number(n[20])
+      && mod10(n.slice(21, 31)) === Number(n[31]);
+    const fator = Number(n.slice(33, 37));
+    const valor = Number(n.slice(37, 47)) / 100;
+    let vencimento = null;
+    if (fator >= 1000) {
+      // O fator recomeçou em 1000 em 22/02/2025; escolhe a data mais próxima de hoje.
+      const antiga = somarDias('1997-10-07', fator);
+      const nova = somarDias('2025-02-22', fator - 1000);
+      vencimento = Math.abs(diferencaDias(hoje, antiga)) < Math.abs(diferencaDias(hoje, nova)) ? antiga : nova;
+    }
+    return { tipo: 'bancario', digitos: n, dvOk, vencimento, valor: valor > 0 ? valor : null };
+  }
+  if (n.length === 48 && n[0] === '8') {
+    const campos = [0, 12, 24, 36].map(i => n.slice(i, i + 11));
+    const ref = n[2];
+    const valor = ref === '6' || ref === '8' ? Number(campos.join('').slice(4, 15)) / 100 : null;
+    return { tipo: 'arrecadacao', digitos: n, dvOk: true, vencimento: null, valor: valor > 0 ? valor : null };
+  }
+  return null;
+}
+
+export function formatarLinha(digitos) {
+  const n = soDigitos(digitos);
+  if (n.length === 47) {
+    return `${n.slice(0, 5)}.${n.slice(5, 10)} ${n.slice(10, 15)}.${n.slice(15, 21)} ${n.slice(21, 26)}.${n.slice(26, 32)} ${n[32]} ${n.slice(33)}`;
+  }
+  if (n.length === 48) return n.match(/.{12}/g).join(' ');
+  return n;
+}
+
+// Despesas com vencimento ainda não pagas, separadas por situação.
+export function boletosEmAberto(d, hoje = hojeISO(), dias = 7) {
+  const limite = somarDias(hoje, dias);
+  const abertos = d.despesas.filter(x => !x.pago && x.vencimento)
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  return {
+    vencidos: abertos.filter(x => x.vencimento < hoje),
+    proximos: abertos.filter(x => x.vencimento >= hoje && x.vencimento <= limite),
+    depois: abertos.filter(x => x.vencimento > limite),
+  };
+}
+
+// Datas das parcelas mensais a partir do 1º vencimento (31/01 → 28/02 → 31/03…).
+export function vencimentosMensais(primeiro, quantidade) {
+  const [a, m, d] = primeiro.split('-').map(Number);
+  return Array.from({ length: quantidade }, (_, i) => {
+    const total = m - 1 + i;
+    const ano = a + Math.floor(total / 12), mes = total % 12 + 1;
+    const dia = Math.min(d, new Date(ano, mes, 0).getDate());
+    return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  });
+}

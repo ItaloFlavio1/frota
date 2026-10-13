@@ -80,6 +80,18 @@ export async function salvarDespesa(id, dados) {
   await recarregar();
 }
 
+// Boleto parcelado: todas as parcelas ficam ligadas pelo mesmo grupo.
+export async function salvarParcelas(parcelas) {
+  const grupo = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  for (const p of parcelas) await db.inserir('despesas', { ...p, grupo_parcelas: grupo });
+  await recarregar();
+}
+
+export async function apagarParcelasEmAberto(grupo) {
+  for (const x of D.despesas.filter(x => x.grupo_parcelas === grupo && !x.pago)) await db.remover('despesas', x.id);
+  await recarregar();
+}
+
 // Abastecimento gera exatamente uma despesa (categoria diesel), sempre sem viagem.
 export async function salvarAbastecimento(id, dados, financeiro) {
   const a = await salvar('abastecimentos', id, dados);

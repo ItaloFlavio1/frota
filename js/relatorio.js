@@ -57,7 +57,9 @@ export async function baixarExcel({ ano, caminhao }) {
   aba('Despesas', S.ordenarPorData(D.despesas.filter(x => doFiltro(x) && noAno(x.data_gasto, ano)), 'data_gasto').reverse().map(x => ({
     'Data do gasto': data(x.data_gasto), 'Placa': placa(x.caminhao_id), 'Categoria': nomeCategoria(x.categoria),
     'Descrição': x.descricao || '', 'Valor': Number(x.valor), 'Situação': x.pago ? 'Pago' : 'Pendente',
-    'Data do pagamento': data(x.data_pagamento), 'Origem': x.abastecimento_id ? 'Abastecimento' : x.manutencao_id ? 'Manutenção' : 'Lançamento',
+    'Data do pagamento': data(x.data_pagamento), 'Fornecedor': x.fornecedor || '', 'Vencimento': data(x.vencimento),
+    'Parcela': x.total_parcelas > 1 ? `${x.parcela}/${x.total_parcelas}` : '', 'Código do boleto': x.linha_digitavel || '',
+    'Origem': x.abastecimento_id ? 'Abastecimento' : x.manutencao_id ? 'Manutenção' : x.vencimento ? 'Boleto' : 'Lançamento',
     'Lançado por': S.autor(x),
   })));
   aba('Abastecimentos', S.ordenarPorData(D.abastecimentos.filter(a => doFiltro(a) && noAno(a.data, ano))).reverse().map(a => ({
@@ -69,6 +71,13 @@ export async function baixarExcel({ ano, caminhao }) {
     'Data': data(m.data), 'Placa': placa(m.caminhao_id), 'Km': m.km != null ? Number(m.km) : '', 'Serviço': m.servico,
     'Custo': Number(m.custo), 'Oficina': m.oficina || '', 'Lançado por': S.autor(m),
   })));
+  aba('Boletos em aberto', D.despesas.filter(x => !x.pago && x.vencimento && ids.includes(x.caminhao_id))
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento)).map(x => ({
+      'Vencimento': data(x.vencimento), 'Placa': placa(x.caminhao_id), 'Fornecedor': x.fornecedor || '',
+      'Categoria': nomeCategoria(x.categoria), 'Descrição': x.descricao || '', 'Valor': Number(x.valor),
+      'Parcela': x.total_parcelas > 1 ? `${x.parcela}/${x.total_parcelas}` : '', 'Situação': x.vencimento < hojeISO() ? 'Vencido' : 'A vencer',
+      'Código do boleto': x.linha_digitavel || '',
+    })));
   aba('A receber por cliente', receberPorCliente(D).map(x => ({
     'Cliente': x.clienteId ? S.cliente(x.clienteId)?.nome : 'Sem cliente', 'A receber (hoje)': r$(x.aReceberC),
     'Atrasado (hoje)': r$(x.atrasadoC), 'Fretes em aberto': x.fretes.length,

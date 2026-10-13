@@ -8,12 +8,13 @@ import {
 import { iconeAjuda } from './help.js';
 import {
   valorBrutoFrete, pesoEmToneladas, centavos, aReceberDoFrete, recebidoDoFrete,
-  hojeISO, proximoVencimento,
+  hojeISO, proximoVencimento, lerLinhaDigitavel, formatarLinha, soDigitos, vencimentosMensais,
 } from './calc.js';
 
 export const CATEGORIAS = [
   ['diesel', 'Diesel'], ['pedagio', 'Pedágio'], ['alimentacao', 'Alimentação'],
-  ['manutencao', 'Manutenção'], ['pneus', 'Pneus'], ['comissao', 'Comissão/motorista'], ['outros', 'Outros'],
+  ['manutencao', 'Manutenção'], ['pneus', 'Pneus'], ['comissao', 'Comissão/motorista'],
+  ['financiamento', 'Parcela/financiamento'], ['seguro', 'Seguro'], ['impostos', 'Impostos e taxas'], ['outros', 'Outros'],
 ];
 export const STATUS_VIAGEM = [
   ['planejada', 'Planejada'], ['em_andamento', 'Em andamento'], ['concluida', 'Concluída'], ['cancelada', 'Cancelada'],
@@ -400,23 +401,40 @@ function opcoesViagens(caminhaoId) {
     .map(v => [v.id, `${dataBRc(v.data_inicio)} · ${v.origem || '?'} → ${v.destino || '?'}`]);
 }
 
-export function formDespesa({ x = null, caminhaoId = null, viagemId = null } = {}) {
+// Despesa comum ou boleto (despesa com vencimento). Um boleto novo pode ser parcelado:
+// cada parcela vira uma despesa com a data do gasto igual ao próprio vencimento.
+export function formDespesa({ x = null, caminhaoId = null, viagemId = null, boleto = false } = {}) {
   exigir(!x?.abastecimento_id && !x?.manutencao_id, 'Esta despesa foi gerada por um abastecimento ou manutenção. Edite pelo lançamento de origem.');
   const vId = x?.viagem_id ?? viagemId;
   const cId = x?.caminhao_id || caminhaoId || (vId && S.viagem(vId)?.caminhao_id);
+  const ehBoleto = boleto || !!x?.vencimento || !!x?.linha_digitavel;
+  const novo = !x;
   abrirFormulario({
-    titulo: x ? 'Editar despesa' : 'Nova despesa',
+    titulo: x ? (ehBoleto ? 'Editar boleto' : 'Editar despesa') : (ehBoleto ? 'Novo boleto' : 'Nova despesa'),
     subtitulo: ' ',
     html: `
       ${campoCaminhao(cId)}
       <div data-viagens></div>
+      ${caixa({ nome: 'eh_boleto', rotulo: 'É um boleto / conta com vencimento', marcado: ehBoleto, ajuda: 'boleto' })}
+      <fieldset class="grupo" data-boleto><legend>Boleto</legend>
+        ${campo({ nome: 'linha_digitavel', rotulo: 'Código do boleto (linha digitável)', valor: x?.linha_digitavel ? formatarLinha(x.linha_digitavel) : '',
+          ajuda: 'linha_digitavel', attrs: 'inputmode="numeric" autocomplete="off" placeholder="Cole ou digite os números"' })}
+        <p class="calculo" data-leitura aria-live="polite"></p>
+        ${campo({ nome: 'fornecedor', rotulo: 'Fornecedor / quem cobra', valor: x?.fornecedor, attrs: 'placeholder="Ex.: Banco Volvo, Oficina Diesel Sul"' })}
+        <div class="linha">
+          ${campo({ nome: 'vencimento', rotulo: novo ? 'Vencimento (1ª parcela)' : 'Vencimento', tipo: 'date', valor: x?.vencimento, ajuda: 'vencimento_boleto' })}
+          ${novo ? campo({ nome: 'parcelas', rotulo: 'Nº de parcelas', tipo: 'numero', valor: '1', ajuda: 'parcelas' }) : ''}
+        </div>
+        ${x?.total_parcelas > 1 ? `<p class="nota">Parcela ${x.parcela} de ${x.total_parcelas}.</p>` : ''}
+        <p class="calculo" data-parcelas aria-live="polite"></p>
+      </fieldset>
       ${selecao({ nome: 'categoria', rotulo: 'Categoria', opcoes: CATEGORIAS, valor: x?.categoria, obrigatorio: true, vazio: 'Selecione…' })}
       ${campo({ nome: 'descricao', rotulo: 'Descrição', valor: x?.descricao })}
       <div class="linha">
         ${campo({ nome: 'valor', rotulo: 'Valor (R$)', tipo: 'numero', valor: paraCampo(x?.valor), obrigatorio: true })}
-        ${campo({ nome: 'data_gasto', rotulo: 'Data do gasto', tipo: 'date', valor: x?.data_gasto || hojeISO(), ajuda: 'datas_despesa', obrigatorio: true })}
+        <div data-campo-gasto>${campo({ nome: 'data_gasto', rotulo: 'Data do gasto', tipo: 'date', valor: x?.data_gasto || hojeISO(), ajuda: 'datas_despesa', obrigatorio: true })}</div>
       </div>
-      ${pagamentoCampos(x?.pago, x?.data_pagamento, true)}`,
+      ${pagamentoCampos(x?.pago, x?.data_pagamento, !ehBoleto)}`,
     aoMontar(form) {
       ligarFaixa(form, id => {
         form.querySelector('[data-viagens]').innerHTML = id
@@ -424,20 +442,95 @@ export function formDespesa({ x = null, caminhaoId = null, viagemId = null } = {
           : '';
       });
       ligarPagamento(form, 'data_gasto');
+      const caixaBoleto = form.querySelector('[name=eh_boleto]');
+      const grupo = form.querySelector('[data-boleto]');
+      const leitura = form.querySelector('[data-leitura]');
+      const prev = form.querySelector('[data-parcelas]');
+      const atualizar = () => {
+        grupo.hidden = !caixaBoleto.checked;
+        const v = valoresDe(form);
+        const n = Number(lerNumero(v.parcelas)) || 1;
+        // Parcelado: a data do gasto de cada parcela é o próprio vencimento.
+        form.querySelector('[data-campo-gasto]').hidden = caixaBoleto.checked && novo && n > 1;
+        const valor = lerNumero(v.valor);
+        if (caixaBoleto.checked && novo && n > 1 && v.vencimento && valor > 0) {
+          const datas = vencimentosMensais(v.vencimento, n);
+          prev.textContent = `${n}× ${moedaC(centavos(valor))} = ${moedaC(centavos(valor) * n)} · de ${dataBRc(datas[0])} até ${dataBRc(datas.at(-1))}, todo mês`;
+        } else prev.textContent = '';
+      };
+      form.querySelector('[name=linha_digitavel]').addEventListener('input', e => {
+        const info = lerLinhaDigitavel(e.target.value);
+        if (!info) {
+          const qtd = soDigitos(e.target.value).length;
+          leitura.textContent = qtd ? `${qtd} dígitos — o boleto tem 47 (bancário) ou 48 (contas de consumo e tributos).` : '';
+          return;
+        }
+        // Preenche vencimento e valor lidos do código, se ainda estiverem vazios.
+        if (info.vencimento && !form.vencimento.value) form.vencimento.value = info.vencimento;
+        if (info.valor && !form.valor.value) form.valor.value = paraCampo(info.valor);
+        leitura.textContent = (info.dvOk ? '✔ Código lido' : '⚠ Confira o código: os dígitos verificadores não batem')
+          + (info.vencimento ? ` · vence ${dataBRc(info.vencimento)}` : '') + (info.valor ? ` · ${moedaC(centavos(info.valor))}` : '');
+        atualizar();
+      });
+      form.addEventListener('input', atualizar);
+      form.addEventListener('change', atualizar);
+      atualizar();
     },
     async aoSalvar(form) {
       const v = valoresDe(form);
       exigir(v.caminhao_id, 'Escolha o caminhão.');
       exigir(v.categoria, 'Escolha a categoria.');
-      exigir(v.data_gasto, 'Preencha a data do gasto.');
       const valor = numeroCampo(v.valor, 'o valor', { obrigatorio: true, minimo: 0 });
       const viagem_id = v.viagem_id || null;
       exigir(!viagem_id || S.viagem(viagem_id).caminhao_id === v.caminhao_id, 'A viagem escolhida é de outro caminhão.');
-      await S.salvarDespesa(x?.id, {
-        caminhao_id: v.caminhao_id, viagem_id, categoria: v.categoria, descricao: v.descricao || null,
-        valor, data_gasto: v.data_gasto, ...lerPagamento(v, v.data_gasto),
-      });
-      concluir('Despesa salva.');
+      const base = { caminhao_id: v.caminhao_id, viagem_id, categoria: v.categoria, descricao: v.descricao || null, valor };
+
+      if (!v.eh_boleto) {
+        exigir(v.data_gasto, 'Preencha a data do gasto.');
+        await S.salvarDespesa(x?.id, { ...base, data_gasto: v.data_gasto, ...lerPagamento(v, v.data_gasto),
+          fornecedor: null, vencimento: null, linha_digitavel: null });
+        concluir('Despesa salva.');
+        return;
+      }
+      exigir(v.vencimento, 'Preencha o vencimento do boleto.');
+      const digitos = soDigitos(v.linha_digitavel);
+      exigir(!digitos || digitos.length === 47 || digitos.length === 48, 'O código do boleto deve ter 47 ou 48 números (ou deixe em branco).');
+      const boletoBase = { ...base, fornecedor: v.fornecedor || null, linha_digitavel: digitos || null };
+      const parcelas = novo ? numeroCampo(v.parcelas, 'o nº de parcelas', { positivo: true }) || 1 : 1;
+      exigir(Number.isInteger(parcelas) && parcelas <= 120, 'Nº de parcelas deve ser um número inteiro até 120.');
+
+      if (parcelas > 1) {
+        exigir(!v.pago, 'Para boleto parcelado, salve sem marcar "Já foi pago" e dê baixa em cada parcela na tela Boletos.');
+        await S.salvarParcelas(vencimentosMensais(v.vencimento, parcelas).map((venc, i) => ({
+          ...boletoBase, linha_digitavel: i === 0 ? boletoBase.linha_digitavel : null,
+          vencimento: venc, data_gasto: venc, pago: false, data_pagamento: null, parcela: i + 1, total_parcelas: parcelas,
+        })));
+        concluir(`${parcelas} parcelas lançadas.`);
+        return;
+      }
+      exigir(v.data_gasto, 'Preencha a data do gasto.');
+      await S.salvarDespesa(x?.id, { ...boletoBase, vencimento: v.vencimento, data_gasto: v.data_gasto, ...lerPagamento(v, v.vencimento) });
+      concluir('Boleto salvo.');
+    },
+  });
+}
+
+// Dar baixa: confirma valor pago e data do pagamento.
+export function formPagarBoleto(x) {
+  abrirFormulario({
+    titulo: 'Marcar boleto como pago',
+    subtitulo: faixa(x.caminhao_id),
+    html: `<p><strong>${esc(x.fornecedor || nomeCategoria(x.categoria))}</strong>${x.total_parcelas > 1 ? ` · parcela ${x.parcela}/${x.total_parcelas}` : ''}<br>
+        <small>vence ${dataBRc(x.vencimento)} · ${moedaC(centavos(x.valor))}</small></p>
+      ${campo({ nome: 'data_pagamento', rotulo: 'Data do pagamento', tipo: 'date', valor: hojeISO(), obrigatorio: true })}
+      ${campo({ nome: 'valor', rotulo: 'Valor pago (R$)', tipo: 'numero', valor: paraCampo(x.valor), obrigatorio: true, dica: 'Ajuste se pagou com juros ou desconto.' })}`,
+    textoSalvar: 'Confirmar pagamento',
+    async aoSalvar(form) {
+      const v = valoresDe(form);
+      exigir(v.data_pagamento, 'Preencha a data do pagamento.');
+      const valor = numeroCampo(v.valor, 'o valor', { obrigatorio: true, minimo: 0 });
+      await S.salvarDespesa(x.id, { pago: true, data_pagamento: v.data_pagamento, valor });
+      concluir('Pagamento registrado.');
     },
   });
 }
@@ -626,7 +719,7 @@ export function novoLancamento(caminhaoId = null) {
   if (!D.caminhoes.some(c => c.ativo)) { formCaminhao(); aviso('Primeiro cadastre um caminhão.', 'info'); return; }
   const tipos = [
     ['viagem', '🛣️ Viagem / frete'], ['despesa', '🧾 Despesa'], ['abastecimento', '⛽ Abastecimento'],
-    ['recebimento', '💰 Recebimento'], ['manutencao', '🔧 Manutenção realizada'], ['plano', '📅 Manutenção prevista'],
+    ['recebimento', '💰 Recebimento'], ['boleto', '📄 Boleto a pagar'], ['manutencao', '🔧 Manutenção realizada'], ['plano', '📅 Manutenção prevista'],
   ];
   const dlg = abrirFormulario({
     titulo: 'Novo lançamento',
@@ -646,6 +739,7 @@ export function novoLancamento(caminhaoId = null) {
         despesa: () => formDespesa({ caminhaoId: c }),
         abastecimento: () => formAbastecimento({ caminhaoId: c }),
         recebimento: () => formRecebimento({ caminhaoId: c }),
+        boleto: () => formDespesa({ caminhaoId: c, boleto: true }),
         manutencao: () => formManutencao({ caminhaoId: c }),
         plano: () => formPlano({ caminhaoId: c }),
       })[v.tipo](), 0);
