@@ -215,7 +215,9 @@ create trigger trg_checar_recebimento before insert or update on recebimentos
   for each row execute function checar_recebimento();
 
 -- ---------------------------------------------------------------------
--- Segurança: cada usuário só vê e altera os próprios dados
+-- Segurança: só quem tem login entra; todos os logins (ex.: Camila e o
+-- dono/master) veem e alteram os MESMOS dados da frota. Visitantes sem
+-- login não veem nada. A quantidade de logins é limitada mais abaixo.
 -- ---------------------------------------------------------------------
 do $$
 declare t text;
@@ -224,14 +226,16 @@ begin
                            'planos_manutencao','manutencoes','despesas'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists dono on %I', t);
-    execute format('create policy dono on %I for all to authenticated
-                    using (owner_id = auth.uid()) with check (owner_id = auth.uid())', t);
+    execute format('drop policy if exists frota on %I', t);
+    execute format('create policy frota on %I for all to authenticated
+                    using (true) with check (true)', t);
   end loop;
 end $$;
 
 alter table auditoria enable row level security;
 drop policy if exists dono_leitura on auditoria;
-create policy dono_leitura on auditoria for select to authenticated using (owner_id = auth.uid());
+drop policy if exists frota_leitura on auditoria;
+create policy frota_leitura on auditoria for select to authenticated using (true);
 
 -- Índices úteis
 create index if not exists idx_viagens_caminhao   on viagens(caminhao_id);
@@ -244,13 +248,13 @@ create index if not exists idx_manut_caminhao     on manutencoes(caminhao_id);
 create index if not exists idx_planos_caminhao    on planos_manutencao(caminhao_id);
 
 -- ---------------------------------------------------------------------
--- Cadastro pela tela do sistema: só o PRIMEIRO acesso pode criar conta.
--- Para permitir mais pessoas, troque o 1 abaixo (ex.: 3) e rode de novo.
+-- Cadastro pela tela do sistema: só os 2 primeiros logins são aceitos
+-- (ex.: Camila + master). Para permitir mais, troque o 2 abaixo e rode de novo.
 -- ---------------------------------------------------------------------
 create or replace function limitar_cadastros() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if (select count(*) from auth.users) >= 1 then
+  if (select count(*) from auth.users) >= 2 then
     raise exception 'Cadastro fechado';
   end if;
   return new;

@@ -509,7 +509,7 @@ async function telaLogin(modo = 'entrar') {
   const criar = modo === 'criar';
   $conteudo().innerHTML = `<form class="login cartao" novalidate>
     <h1>${criar ? 'Criar login' : 'Controle de Frota'}</h1>
-    ${criar ? '<p class="nota">Primeiro acesso: escolha o e-mail e a senha que vão entrar no sistema. Depois disso, ninguém mais consegue criar login.</p>' : ''}
+    ${criar ? '<p class="nota">Crie seu login com e-mail e senha. O sistema aceita no máximo 2 logins, e os dois veem os mesmos dados.</p>' : ''}
     <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
     <label>Senha <input name="senha" type="password" autocomplete="${criar ? 'new-password' : 'current-password'}" required></label>
     ${criar ? '<label>Repita a senha <input name="senha2" type="password" autocomplete="new-password" required></label>' : ''}
