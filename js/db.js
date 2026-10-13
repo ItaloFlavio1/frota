@@ -53,6 +53,10 @@ function criarSupabase() {
       const { error } = await sb.auth.updateUser({ password: senha });
       erro(error);
     },
+    async marcarTutorial(versao) {
+      const { error } = await sb.auth.updateUser({ data: { tutorial_visto: versao } });
+      erro(error);
+    },
     aoRecuperarSenha(fn) {
       sb.auth.onAuthStateChange(evento => { if (evento === 'PASSWORD_RECOVERY') fn(); });
     },
@@ -132,6 +136,7 @@ function criarLocal() {
     async recuperarSenha() {},
     async trocarSenha() {},
     aoRecuperarSenha() {},
+    async marcarTutorial() {},
     async sair() {},
     async listar(tabela) { return copia(dados[tabela]); },
     async inserir(tabela, linha) {

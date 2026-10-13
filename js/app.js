@@ -13,6 +13,7 @@ import {
   boletosEmAberto, formatarLinha, diferencaDias,
 } from './calc.js';
 import { decifrarBackup } from './cripto.js';
+import { iniciarTutorial, deveMostrarTutorial } from './tour.js';
 
 const $conteudo = () => document.getElementById('conteudo');
 
@@ -535,6 +536,11 @@ async function telaDados() {
     ${db.modo === 'local' ? `<div class="banner aviso"><strong>Modo demonstração.</strong> Os dados ficam só neste navegador e podem ser perdidos. Configure o Supabase (veja o LEIAME) para usar de verdade.</div>` :
       `<p>Conectado como <strong>${esc(u?.email)}</strong>.</p>`}
     <section class="cartao">
+      <h2>Tutorial</h2>
+      <p>Reveja o passo a passo de como usar cada parte do sistema.</p>
+      <p><button class="btn sec" data-acao="ver-tutorial">Ver tutorial</button></p>
+    </section>
+    <section class="cartao">
       <h2>Cópia de segurança</h2>
       <p>Baixe um arquivo com todos os dados. Recomendado uma vez por semana — guarde no Google Drive, e-mail ou pendrive.</p>
       <p><button class="btn" data-acao="exportar">Baixar cópia de segurança</button></p>
@@ -641,6 +647,7 @@ const ACOES = {
     await baixarExcel({ ano: Number(filtro.ano) || Number(hojeISO().slice(0, 4)), caminhao: filtro.caminhao });
   },
   'imprimir': () => print(),
+  'ver-tutorial': () => iniciarTutorial(),
   'novo-boleto': () => F.formDespesa({ caminhaoId: filtro.caminhao || null, boleto: true }),
   'pagar-boleto': id => F.formPagarBoleto(D.despesas.find(x => x.id === id)),
   'copiar-linha': async id => {
@@ -879,7 +886,9 @@ async function iniciarSessao() {
       : `<div class="banner erro">Não foi possível carregar os dados: ${esc(err.message)}</div>`;
     return;
   }
-  render();
+  await render();
+  // Tutorial na primeira vez de cada usuário (login ou F5).
+  if (deveMostrarTutorial(await db.usuario())) iniciarTutorial();
 }
 
 async function iniciar() {
