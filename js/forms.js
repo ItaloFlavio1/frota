@@ -30,7 +30,7 @@ const concluir = msg => { aviso(msg); aoMudar(); };
 function opcoesCaminhao(atualId) {
   return D.caminhoes
     .filter(c => c.ativo || c.id === atualId)
-    .map(c => [c.id, rotuloCaminhao(c) + (c.ativo ? '' : ' (inativo)')]);
+    .map(c => [c.id, rotuloCaminhao(c) + (c.ativo ? '' : ' (desativado)')]);
 }
 
 function campoCaminhao(valor) {

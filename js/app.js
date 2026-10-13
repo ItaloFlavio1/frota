@@ -43,7 +43,7 @@ function intervalo() {
 }
 
 function barraFiltros({ periodo = true, status = false } = {}) {
-  const ops = D.caminhoes.map(c => `<option value="${c.id}" ${filtro.caminhao === c.id ? 'selected' : ''}>${esc(rotuloCaminhao(c))}${c.ativo ? '' : ' (inativo)'}</option>`).join('');
+  const ops = D.caminhoes.map(c => `<option value="${c.id}" ${filtro.caminhao === c.id ? 'selected' : ''}>${esc(rotuloCaminhao(c))}${c.ativo ? '' : ' (desativado)'}</option>`).join('');
   const per = [['mes', 'Este mês'], ['mes_anterior', 'Mês anterior'], ['ano', 'Este ano'], ['tudo', 'Todo o período'], ['personalizado', 'Escolher datas']];
   return `<div class="filtros" role="search">
     <label>Caminhão <select data-filtro="caminhao"><option value="">Toda a frota</option>${ops}</select></label>
@@ -167,7 +167,7 @@ function telaResumo() {
       ${resumos.map(({ c, r }) => {
         const mr = mediaReal(D.abastecimentos.filter(a => a.caminhao_id === c.id));
         return `<section class="cartao">
-          <header><h2>${esc(c.modelo)}</h2><span class="placa">${esc(c.placa)}</span>${c.ativo ? '' : '<span class="selo">Inativo</span>'}</header>
+          <header><h2>${esc(c.modelo)}</h2><span class="placa">${esc(c.placa)}</span>${c.ativo ? '' : '<span class="selo">Desativado</span>'}</header>
           ${cartaoNumeros(r)}
           <p class="rodape">Hodômetro ${num(c.hodometro)} km · Média real ${iconeAjuda('media_real')} ${mr ? num(mr.geral, 2) + ' km/l' : 'dados insuficientes'}</p>
         </section>`;
@@ -180,18 +180,28 @@ function telaResumo() {
 // ---------------------------------------------------------------------------
 // Caminhões
 // ---------------------------------------------------------------------------
+function itemCaminhao(c) {
+  const mr = mediaReal(D.abastecimentos.filter(a => a.caminhao_id === c.id));
+  return `<li class="item ${c.ativo ? '' : 'inativo'}">
+    <a class="principal" href="#/caminhoes/${c.id}">
+      <strong>${esc(c.modelo)}</strong> <span class="placa">${esc(c.placa)}</span> ${c.ativo ? '' : '<span class="selo">Desativado</span>'}
+      <small>${c.ano ? c.ano + ' · ' : ''}${num(c.hodometro)} km · média estimada ${c.media_kml ? num(c.media_kml, 2) + ' km/l' : '—'} · média real ${mr ? num(mr.geral, 2) + ' km/l' : 'dados insuficientes'}</small>
+    </a>
+    <div class="acoes">
+      <button class="btn mini sec" data-acao="editar-caminhao" data-id="${c.id}">Editar</button>
+      ${c.ativo
+        ? `<button class="btn mini perigo" data-acao="inativar-caminhao" data-id="${c.id}">Desativar</button>`
+        : `<button class="btn mini sec" data-acao="ativar-caminhao" data-id="${c.id}">Reativar</button>`}
+      ${S.temHistorico(c.id) ? '' : `<button class="btn mini perigo" data-acao="apagar-caminhao" data-id="${c.id}">Apagar</button>`}
+    </div>
+  </li>`;
+}
+
 function telaCaminhoes() {
+  const ativos = D.caminhoes.filter(c => c.ativo), inativos = D.caminhoes.filter(c => !c.ativo);
   return `<div class="titulo"><h1>Caminhões</h1><button class="btn" data-acao="novo-caminhao">+ Caminhão</button></div>
-    ${D.caminhoes.length ? `<ul class="lista">${D.caminhoes.map(c => {
-      const mr = mediaReal(D.abastecimentos.filter(a => a.caminhao_id === c.id));
-      return `<li class="item ${c.ativo ? '' : 'inativo'}">
-        <a class="principal" href="#/caminhoes/${c.id}">
-          <strong>${esc(c.modelo)}</strong> <span class="placa">${esc(c.placa)}</span> ${c.ativo ? '' : '<span class="selo">Inativo</span>'}
-          <small>${c.ano ? c.ano + ' · ' : ''}${num(c.hodometro)} km · média estimada ${c.media_kml ? num(c.media_kml, 2) + ' km/l' : '—'} · média real ${mr ? num(mr.geral, 2) + ' km/l' : 'dados insuficientes'}</small>
-        </a>
-        <div class="acoes"><button class="btn mini sec" data-acao="editar-caminhao" data-id="${c.id}">Editar</button></div>
-      </li>`;
-    }).join('')}</ul>` : vazio('Nenhum caminhão cadastrado.')}`;
+    ${ativos.length ? `<ul class="lista">${ativos.map(itemCaminhao).join('')}</ul>` : vazio('Nenhum caminhão ativo.')}
+    ${inativos.length ? `<h2>Desativados ${iconeAjuda('caminhao_desativado')}</h2><ul class="lista">${inativos.map(itemCaminhao).join('')}</ul>` : ''}`;
 }
 
 function telaCaminhao(id) {
@@ -206,7 +216,7 @@ function telaCaminhao(id) {
       <div class="acoes">
         <button class="btn sec" data-acao="editar-caminhao" data-id="${id}">Editar</button>
         <button class="btn sec" data-acao="corrigir-hodometro" data-id="${id}">Corrigir hodômetro</button>
-        <button class="btn sec" data-acao="${c.ativo ? 'inativar' : 'ativar'}-caminhao" data-id="${id}">${c.ativo ? 'Inativar' : 'Reativar'}</button>
+        <button class="btn ${c.ativo ? 'perigo' : 'sec'}" data-acao="${c.ativo ? 'inativar' : 'ativar'}-caminhao" data-id="${id}">${c.ativo ? 'Desativar' : 'Reativar'}</button>
         ${S.temHistorico(id) ? '' : `<button class="btn perigo" data-acao="apagar-caminhao" data-id="${id}">Apagar</button>`}
       </div></div>
     <dl class="ficha">
@@ -425,7 +435,7 @@ function telaClientes() {
     ${lista.length || semCliente ? `<ul class="lista">${lista.map(cl => {
       const x = abertos.get(cl.id);
       return `<li class="item ${cl.ativo ? '' : 'inativo'}"><a class="principal" href="#/clientes/${cl.id}">
-          <strong>${esc(cl.nome)}</strong> ${cl.ativo ? '' : '<span class="selo">Inativo</span>'}
+          <strong>${esc(cl.nome)}</strong> ${cl.ativo ? '' : '<span class="selo">Desativado</span>'}
           <small>${[cl.documento, cl.telefone].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</small></a>
         <div class="valor"><span>${moedaC(x?.aReceberC || 0)}</span><small>${x?.atrasadoC ? `<span class="neg">${moedaC(x.atrasadoC)} atrasado</span>` : 'a receber'}</small></div>
       </li>`;
@@ -571,7 +581,16 @@ const ACOES = {
   'novo-caminhao': () => F.formCaminhao(),
   'editar-caminhao': id => F.formCaminhao(S.caminhao(id)),
   'corrigir-hodometro': id => F.formHodometro(S.caminhao(id)),
-  'inativar-caminhao': async id => { await S.salvarCaminhao(id, { ativo: false }); aviso('Caminhão inativado. O histórico foi mantido.'); render(); },
+  'inativar-caminhao': async id => {
+    const c = S.caminhao(id);
+    const ok = await confirmar(`Desativar <strong>${esc(c.modelo)} (${esc(c.placa)})</strong>?<br><br>
+      Ele some das opções de novos lançamentos e dos avisos de manutenção. <strong>Nada é apagado</strong>:
+      viagens, despesas e totais continuam no histórico e nos relatórios. Você pode reativar quando quiser.`, 'Desativar');
+    if (!ok) return;
+    await S.salvarCaminhao(id, { ativo: false });
+    aviso('Caminhão desativado. O histórico foi mantido.');
+    render();
+  },
   'ativar-caminhao': async id => { await S.salvarCaminhao(id, { ativo: true }); aviso('Caminhão reativado.'); render(); },
   'apagar-caminhao': id => apagarCom('Apagar este caminhão? Ele não tem lançamentos.', async () => {
     await S.apagar('caminhoes', id); location.hash = '#/caminhoes';

@@ -43,6 +43,7 @@ export const AJUDA = {
   vencimento_boleto: ['vencimento', 'Último dia para pagar sem juros. Boletos não pagos aparecem como atrasados depois desta data.'],
   parcelas: ['parcelas', 'Para compras parceladas: o sistema cria uma conta por mês, a partir do 1º vencimento. Exemplo: 10 parcelas de R$ 1.500, a 1ª em 10/11.'],
   boletos_vencer: ['boletos a pagar', 'Boletos ainda não pagos que já venceram ou vencem nos próximos 7 dias.'],
+  caminhao_desativado: ['caminhão desativado', 'Caminhão vendido ou parado. Não aparece para novos lançamentos, mas todo o histórico continua nos relatórios. Use Reativar para voltar a usar.'],
   status_viagem: ['situação da viagem', 'Planejada, em andamento, concluída ou cancelada. Serve para organizar a lista.'],
 };
 
