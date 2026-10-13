@@ -1,5 +1,6 @@
 // Telas, navegação e inicialização.
-import { db } from './db.js';
+import { db, chegouPorRecuperacao, erroNoLink } from './db.js';
+import { telaPainel, montarGraficos } from './painel.js';
 import * as S from './state.js';
 import { D } from './state.js';
 import * as F from './forms.js';
@@ -8,8 +9,9 @@ import { iniciarAjuda, iconeAjuda } from './help.js';
 import { esc, moedaC, moeda, num, dataBR, rotuloCaminhao, confirmar, aviso } from './ui.js';
 import {
   centavos, resumoViagem, resumoCaminhao, somarResumos, mediaReal, statusPlano,
-  recebidoDoFrete, aReceberDoFrete, hojeISO, caminhaoDoFrete,
+  recebidoDoFrete, aReceberDoFrete, hojeISO, caminhaoDoFrete, receberPorCliente, fretesEmAberto,
 } from './calc.js';
+import { decifrarBackup } from './cripto.js';
 
 const $conteudo = () => document.getElementById('conteudo');
 
@@ -58,6 +60,8 @@ const vazio = msg => `<p class="vazio">${msg}</p>`;
 const placa = id => esc(S.caminhao(id)?.placa || '?');
 const rota = x => `${esc(x.origem || '?')} → ${esc(x.destino || '?')}`;
 const sinal = c => `<span class="${c < 0 ? 'neg' : ''}">${moedaC(c)}</span>`;
+const por = x => S.autor(x) ? ` · por ${esc(S.autor(x))}` : '';
+const nomeCliente = id => id ? esc(S.cliente(id)?.nome || '?') : 'Sem cliente';
 
 // ---------------------------------------------------------------------------
 // Resumo
@@ -93,6 +97,23 @@ function alertasManutencao(caminhoes) {
   </section>`;
 }
 
+function alertasRecebimento(caminhoes) {
+  const ids = new Set(caminhoes.map(c => c.id));
+  const atrasados = fretesEmAberto(D).filter(x => x.atrasado && ids.has(caminhaoDoFrete(D, x.f)))
+    .sort((a, b) => a.f.vencimento.localeCompare(b.f.vencimento));
+  if (!atrasados.length) return '';
+  const totalC = atrasados.reduce((s, x) => s + x.faltaC, 0);
+  return `<section class="alertas" aria-label="Recebimentos atrasados">
+    <h2>Recebimentos atrasados ${iconeAjuda('atrasados')} <small>${moedaC(totalC)}</small></h2>
+    <ul>${atrasados.slice(0, 5).map(({ f, faltaC }) => `<li class="alerta atrasada">
+      <span class="selo atrasada">Atrasado</span>
+      <span><strong>${nomeCliente(f.cliente_id)}</strong> · ${moedaC(faltaC)}<br>
+        <small>${rota(f)} · venceu em ${dataBR(f.vencimento)} · <span class="placa">${placa(caminhaoDoFrete(D, f))}</span></small></span>
+      <button class="btn mini" data-acao="receber-frete" data-id="${f.id}">Receber</button></li>`).join('')}</ul>
+    ${atrasados.length > 5 ? `<p><a href="#/clientes">Ver todos (${atrasados.length})</a></p>` : ''}
+  </section>`;
+}
+
 function telaResumo() {
   const per = intervalo();
   const caminhoes = D.caminhoes.filter(c => filtro.caminhao ? c.id === filtro.caminhao : (c.ativo || S.temHistorico(c.id)));
@@ -107,6 +128,7 @@ function telaResumo() {
     ${barraFiltros()}
     <p class="periodo">Período: ${txtPer}</p>
     ${alertasManutencao(caminhoes)}
+    ${alertasRecebimento(caminhoes)}
     <div class="grade-cartoes">
       ${resumos.map(({ c, r }) => {
         const mr = mediaReal(D.abastecimentos.filter(a => a.caminhao_id === c.id));
@@ -174,7 +196,7 @@ function listaViagens(viagens) {
     const r = resumoViagem(D, v);
     return `<li class="item"><a class="principal" href="#/viagens/${v.id}">
       <strong>${rota(v)}</strong> <span class="placa">${placa(v.caminhao_id)}</span>
-      <small>${dataBR(v.data_inicio)} · ${nomeStatus(v.status)} · ${r.fretes.length} frete(s)${r.distancia !== null ? ' · ' + num(r.distancia) + ' km' : ''}</small></a>
+      <small>${dataBR(v.data_inicio)} · ${nomeStatus(v.status)} · ${r.fretes.length} frete(s)${r.distancia !== null ? ' · ' + num(r.distancia) + ' km' : ''}${por(v)}</small></a>
       <div class="valor"><span>${moedaC(r.fretesC)}</span><small>${r.completo ? 'resultado ' + moedaC(r.resultadoC) : 'diesel não calculado'}</small></div>
     </li>`;
   }).join('')}</ul>`;
@@ -234,10 +256,11 @@ function telaViagem(id) {
       return `<li class="item bloco">
         <div class="linha-item">
           <div class="principal"><strong>${rota(f)}</strong>
-            <small>${dataBR(f.data)} · ${f.modalidade === 'tonelada' ? `${num(f.peso_t, 3)} t × ${moeda(f.preco_t)}` : 'valor fechado' + (f.peso_t ? ` · ${num(f.peso_t, 3)} t` : '')}</small></div>
+            <small>${dataBR(f.data)} · ${f.modalidade === 'tonelada' ? `${num(f.peso_t, 3)} t × ${moeda(f.preco_t)}` : 'valor fechado' + (f.peso_t ? ` · ${num(f.peso_t, 3)} t` : '')}
+              · cliente ${f.cliente_id ? `<a href="#/clientes/${f.cliente_id}">${nomeCliente(f.cliente_id)}</a>` : 'não informado'}${f.vencimento ? ` · vence ${dataBR(f.vencimento)}` : ''}${por(f)}</small></div>
           <div class="valor"><span>${moeda(f.valor_bruto)}</span><small>recebido ${moedaC(rec)} ${iconeAjuda('recebido')} · a receber ${moedaC(falta)} ${iconeAjuda('a_receber')}</small></div>
         </div>
-        ${recs.length ? `<ul class="sublista">${recs.map(x => `<li>💰 ${dataBR(x.data)} · ${moeda(x.valor)}${x.observacao ? ' · ' + esc(x.observacao) : ''}
+        ${recs.length ? `<ul class="sublista">${recs.map(x => `<li>💰 ${dataBR(x.data)} · ${moeda(x.valor)}${x.observacao ? ' · ' + esc(x.observacao) : ''}${por(x)}
           <button class="link" data-acao="editar-recebimento" data-id="${x.id}">editar</button>
           <button class="link perigo" data-acao="apagar-recebimento" data-id="${x.id}">apagar</button></li>`).join('')}</ul>` : ''}
         <div class="acoes">
@@ -262,7 +285,7 @@ function listaDespesas(lista) {
     const vg = x.viagem_id && S.viagem(x.viagem_id);
     return `<li class="item">
       <div class="principal"><strong>${nomeCategoria(x.categoria)}</strong> <span class="placa">${placa(x.caminhao_id)}</span>
-        <small>${dataBR(x.data_gasto)}${x.descricao ? ' · ' + esc(x.descricao) : ''}${vg ? ` · viagem <a href="#/viagens/${vg.id}">${rota(vg)}</a>` : ''}${origem ? ` · gerada por ${origem}` : ''}</small></div>
+        <small>${dataBR(x.data_gasto)}${x.descricao ? ' · ' + esc(x.descricao) : ''}${vg ? ` · viagem <a href="#/viagens/${vg.id}">${rota(vg)}</a>` : ''}${origem ? ` · gerada por ${origem}` : ''}${por(x)}</small></div>
       <div class="valor"><span>${moeda(x.valor)}</span><small>${x.pago ? 'pago em ' + dataBR(x.data_pagamento) : '<span class="pendente">pendente</span>'}</small></div>
       ${origem ? '' : `<div class="acoes"><button class="btn mini sec" data-acao="editar-despesa" data-id="${x.id}">Editar</button>
         <button class="btn mini perigo" data-acao="apagar-despesa" data-id="${x.id}">Apagar</button></div>`}
@@ -279,7 +302,7 @@ function telaLancamentos(aba = 'despesas') {
     const lista = S.ordenarPorData(D.abastecimentos.filter(a => doCaminhaoFiltrado(a) && noIntervalo(a.data, per)));
     corpo = `<p class="nota">${iconeAjuda('abastecimento')} Cada abastecimento gera uma despesa de diesel no financeiro do caminhão.</p>` + (lista.length ? `<ul class="lista">${lista.map(a => `<li class="item">
       <div class="principal"><strong>${num(a.litros, 3)} l × ${moeda(a.preco_litro)}</strong> <span class="placa">${placa(a.caminhao_id)}</span>
-        <small>${dataBR(a.data)} · ${a.hodometro != null ? num(a.hodometro) + ' km' : 'sem hodômetro'}${a.posto ? ' · ' + esc(a.posto) : ''}${a.tanque_cheio ? ' · <span class="selo ok">tanque completo</span>' : ''}</small></div>
+        <small>${dataBR(a.data)} · ${a.hodometro != null ? num(a.hodometro) + ' km' : 'sem hodômetro'}${a.posto ? ' · ' + esc(a.posto) : ''}${a.tanque_cheio ? ' · <span class="selo ok">tanque completo</span>' : ''}${por(a)}</small></div>
       <div class="valor"><span>${moeda(a.total)}</span></div>
       <div class="acoes"><button class="btn mini sec" data-acao="editar-abastecimento" data-id="${a.id}">Editar</button>
         <button class="btn mini perigo" data-acao="apagar-abastecimento" data-id="${a.id}">Apagar</button></div>
@@ -294,7 +317,7 @@ function telaLancamentos(aba = 'despesas') {
       const f = S.frete(r.frete_id);
       return `<li class="item">
         <div class="principal"><strong>${rota(f)}</strong> <span class="placa">${placa(caminhaoDoFrete(D, f))}</span>
-          <small>recebido em ${dataBR(r.data)} · frete de ${dataBR(f.data)} (${moeda(f.valor_bruto)})${r.observacao ? ' · ' + esc(r.observacao) : ''} · <a href="#/viagens/${f.viagem_id}">ver viagem</a></small></div>
+          <small>recebido em ${dataBR(r.data)} · ${nomeCliente(f.cliente_id)} · frete de ${dataBR(f.data)} (${moeda(f.valor_bruto)})${r.observacao ? ' · ' + esc(r.observacao) : ''}${por(r)} · <a href="#/viagens/${f.viagem_id}">ver viagem</a></small></div>
         <div class="valor"><span>${moeda(r.valor)}</span></div>
         <div class="acoes"><button class="btn mini sec" data-acao="editar-recebimento" data-id="${r.id}">Editar</button>
           <button class="btn mini perigo" data-acao="apagar-recebimento" data-id="${r.id}">Apagar</button></div>
@@ -342,12 +365,79 @@ function telaManutencoes() {
       const x = D.despesas.find(d => d.manutencao_id === m.id);
       return `<li class="item">
         <div class="principal"><strong>${esc(m.servico)}</strong> <span class="placa">${placa(m.caminhao_id)}</span>
-          <small>${dataBR(m.data)}${m.km != null ? ' · ' + num(m.km) + ' km' : ''}${m.oficina ? ' · ' + esc(m.oficina) : ''}</small></div>
+          <small>${dataBR(m.data)}${m.km != null ? ' · ' + num(m.km) + ' km' : ''}${m.oficina ? ' · ' + esc(m.oficina) : ''}${por(m)}</small></div>
         <div class="valor"><span>${moeda(m.custo)}</span><small>${x?.pago ? 'pago em ' + dataBR(x.data_pagamento) : '<span class="pendente">pendente</span>'}</small></div>
         <div class="acoes"><button class="btn mini sec" data-acao="editar-manutencao" data-id="${m.id}">Editar</button>
           <button class="btn mini perigo" data-acao="apagar-manutencao" data-id="${m.id}">Apagar</button></div>
       </li>`;
     }).join('')}</ul>` : vazio('Nenhuma manutenção realizada.')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Clientes
+// ---------------------------------------------------------------------------
+function telaClientes() {
+  const abertos = new Map(receberPorCliente(D).map(x => [x.clienteId || '', x]));
+  const semCliente = abertos.get('');
+  const lista = [...D.clientes].sort((a, b) =>
+    (abertos.get(b.id)?.aReceberC || 0) - (abertos.get(a.id)?.aReceberC || 0) || a.nome.localeCompare(b.nome));
+  const totalC = [...abertos.values()].reduce((s, x) => s + x.aReceberC, 0);
+  const atrasadoC = [...abertos.values()].reduce((s, x) => s + x.atrasadoC, 0);
+  return `<div class="titulo"><h1>Clientes</h1><button class="btn" data-acao="novo-cliente">+ Cliente</button></div>
+    <dl class="ficha">
+      <div><dt>A receber (todos) ${iconeAjuda('a_receber')}</dt><dd>${moedaC(totalC)}</dd></div>
+      <div><dt>Atrasado ${iconeAjuda('atrasados')}</dt><dd class="${atrasadoC ? 'neg' : ''}">${moedaC(atrasadoC)}</dd></div>
+    </dl>
+    ${lista.length || semCliente ? `<ul class="lista">${lista.map(cl => {
+      const x = abertos.get(cl.id);
+      return `<li class="item ${cl.ativo ? '' : 'inativo'}"><a class="principal" href="#/clientes/${cl.id}">
+          <strong>${esc(cl.nome)}</strong> ${cl.ativo ? '' : '<span class="selo">Inativo</span>'}
+          <small>${[cl.documento, cl.telefone].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</small></a>
+        <div class="valor"><span>${moedaC(x?.aReceberC || 0)}</span><small>${x?.atrasadoC ? `<span class="neg">${moedaC(x.atrasadoC)} atrasado</span>` : 'a receber'}</small></div>
+      </li>`;
+    }).join('')}${semCliente ? `<li class="item"><div class="principal"><strong>Fretes sem cliente</strong><small>${semCliente.fretes.length} frete(s) em aberto</small></div>
+        <div class="valor"><span>${moedaC(semCliente.aReceberC)}</span><small>${semCliente.atrasadoC ? `<span class="neg">${moedaC(semCliente.atrasadoC)} atrasado</span>` : 'a receber'}</small></div></li>` : ''}</ul>`
+      : vazio('Nenhum cliente cadastrado. Cadastre e escolha o cliente ao lançar o frete.')}`;
+}
+
+function telaCliente(id) {
+  const cl = S.cliente(id);
+  if (!cl) return vazio('Cliente não encontrado.');
+  const fretes = S.ordenarPorData(D.fretes.filter(f => f.cliente_id === id));
+  const hoje = hojeISO();
+  const totais = fretes.reduce((t, f) => {
+    const falta = aReceberDoFrete(D, f);
+    t.bruto += centavos(f.valor_bruto); t.falta += falta;
+    if (falta > 0 && f.vencimento && f.vencimento < hoje) t.atrasado += falta;
+    return t;
+  }, { bruto: 0, falta: 0, atrasado: 0 });
+  return `<p><a href="#/clientes">← Clientes</a></p>
+    <div class="titulo"><h1>${esc(cl.nome)}</h1>
+      <div class="acoes"><button class="btn sec" data-acao="editar-cliente" data-id="${id}">Editar</button>
+        ${fretes.length ? '' : `<button class="btn perigo" data-acao="apagar-cliente" data-id="${id}">Apagar</button>`}</div></div>
+    ${cl.documento || cl.telefone || cl.observacao ? `<p class="nota">${[cl.documento, cl.telefone, cl.observacao].filter(Boolean).map(esc).join(' · ')}</p>` : ''}
+    <dl class="ficha">
+      <div><dt>Total em fretes</dt><dd>${moedaC(totais.bruto)}</dd></div>
+      <div><dt>A receber ${iconeAjuda('a_receber')}</dt><dd>${moedaC(totais.falta)}</dd></div>
+      <div><dt>Atrasado ${iconeAjuda('atrasados')}</dt><dd class="${totais.atrasado ? 'neg' : ''}">${moedaC(totais.atrasado)}</dd></div>
+    </dl>
+    <h2>Fretes</h2>
+    ${fretes.length ? `<ul class="lista">${fretes.map(f => {
+      const falta = aReceberDoFrete(D, f);
+      const atrasado = falta > 0 && f.vencimento && f.vencimento < hoje;
+      return `<li class="item"><a class="principal" href="#/viagens/${f.viagem_id}">
+          <strong>${rota(f)}</strong> <span class="placa">${placa(caminhaoDoFrete(D, f))}</span>
+          <small>${dataBR(f.data)}${f.vencimento ? ` · vence ${dataBR(f.vencimento)}` : ''} ${atrasado ? '<span class="selo atrasada">Atrasado</span>' : falta === 0 ? '<span class="selo ok">Quitado</span>' : ''}</small></a>
+        <div class="valor"><span>${moeda(f.valor_bruto)}</span><small>${falta > 0 ? 'falta ' + moedaC(falta) : 'recebido'}</small></div>
+        ${falta > 0 ? `<div class="acoes"><button class="btn mini" data-acao="receber-frete" data-id="${f.id}">+ Recebimento</button></div>` : ''}
+      </li>`;
+    }).join('')}</ul>` : vazio('Nenhum frete deste cliente.')}`;
+}
+
+function telaMais() {
+  const itens = [['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['dados', '💾', 'Dados, backup e conta']];
+  return `<h1>Mais</h1><ul class="lista">${itens.map(([h, i, t]) =>
+    `<li class="item"><a class="principal" href="#/${h}"><strong><span aria-hidden="true">${i}</span> ${t}</strong></a></li>`).join('')}</ul>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,13 +452,14 @@ async function telaDados() {
       <h2>Cópia de segurança</h2>
       <p>Baixe um arquivo com todos os dados. Recomendado uma vez por semana — guarde no Google Drive, e-mail ou pendrive.</p>
       <p><button class="btn" data-acao="exportar">Baixar cópia de segurança</button></p>
-      <p>Restaurar uma cópia (registros com o mesmo código são substituídos; nada é apagado):</p>
-      <p><input type="file" accept="application/json,.json" data-importar aria-label="Arquivo de cópia de segurança"></p>
+      <p>Restaurar uma cópia (registros com o mesmo código são substituídos; nada é apagado). Aceita o arquivo baixado aqui (.json) ou o backup automático do GitHub (.enc):</p>
+      <p><input type="file" accept="application/json,.json,.enc" data-importar aria-label="Arquivo de cópia de segurança"></p>
     </section>
     ${db.modo === 'local' ? `<section class="cartao"><h2>Testar com dados de exemplo</h2>
       <p>Cria dois caminhões e o exemplo do planejamento (32 t × R$ 150, 800 km, 2,5 km/l).</p>
       <p><button class="btn sec" data-acao="exemplo">Carregar exemplo</button></p></section>` :
-      `<p><button class="btn sec" data-acao="sair">Sair</button></p>`}`;
+      `<section class="cartao"><h2>Senha</h2><p><button class="btn sec" data-acao="trocar-senha">Trocar minha senha</button></p></section>
+      <p><button class="btn sec" data-acao="sair">Sair</button></p>`}`;
 }
 
 async function carregarExemplo() {
@@ -444,6 +535,18 @@ const ACOES = {
   },
   'exemplo': async () => { await carregarExemplo(); aviso('Exemplo carregado.'); location.hash = '#/resumo'; },
   'sair': async () => { await db.sair(); location.reload(); },
+  'novo-cliente': () => F.formCliente(),
+  'editar-cliente': id => F.formCliente(S.cliente(id)),
+  'apagar-cliente': id => apagarCom('Apagar este cliente? Ele não tem fretes.', async () => {
+    await S.apagar('clientes', id); location.hash = '#/clientes';
+  }),
+  'baixar-excel': async () => {
+    aviso('Gerando planilha…', 'info');
+    const { baixarExcel } = await import('./relatorio.js');
+    await baixarExcel({ ano: Number(filtro.ano) || Number(hojeISO().slice(0, 4)), caminhao: filtro.caminhao });
+  },
+  'imprimir': () => print(),
+  'trocar-senha': () => telaNovaSenha(true),
 };
 
 document.addEventListener('click', async e => {
@@ -467,7 +570,15 @@ document.addEventListener('change', async e => {
   }
   if (e.target.matches('[data-importar]') && e.target.files[0]) {
     try {
-      const texto = await e.target.files[0].text();
+      const arq = e.target.files[0];
+      let texto;
+      if (arq.name.endsWith('.enc')) {
+        const senha = prompt('Senha do backup automático (a mesma cadastrada no GitHub como BACKUP_SENHA):');
+        if (!senha) return;
+        texto = await decifrarBackup(await arq.arrayBuffer(), senha);
+      } else {
+        texto = await arq.text();
+      }
       if (!(await confirmar('Restaurar esta cópia de segurança? Registros iguais serão substituídos pela versão do arquivo.', 'Restaurar'))) return;
       await S.importarJSON(texto);
       aviso('Cópia restaurada.');
@@ -485,12 +596,17 @@ document.addEventListener('change', async e => {
 // ---------------------------------------------------------------------------
 async function render() {
   const [, rota = 'resumo', id] = (location.hash || '#/resumo').split('/');
+  const noMais = ['caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
   document.querySelectorAll('.menu a').forEach(a => {
-    a.toggleAttribute('aria-current', a.getAttribute('href') === '#/' + rota);
+    const href = a.getAttribute('href');
+    a.toggleAttribute('aria-current', href === '#/' + rota || (href === '#/mais' && noMais));
     if (a.hasAttribute('aria-current')) a.setAttribute('aria-current', 'page');
   });
   const telas = {
     resumo: telaResumo,
+    painel: () => telaPainel(filtro),
+    clientes: () => id ? telaCliente(id) : telaClientes(),
+    mais: telaMais,
     caminhoes: () => id ? telaCaminhao(id) : telaCaminhoes(),
     viagens: () => id ? telaViagem(id) : telaViagens(),
     lancamentos: () => telaLancamentos(id),
@@ -499,7 +615,13 @@ async function render() {
   };
   const el = $conteudo();
   el.innerHTML = await (telas[rota] || telaResumo)();
+  if (rota === 'painel') montarGraficos();
 }
+
+// Gráficos usam as cores do tema: redesenha ao trocar claro/escuro.
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (location.hash.startsWith('#/painel')) montarGraficos();
+});
 
 F.definirAoMudar(render);
 addEventListener('hashchange', () => {
@@ -509,51 +631,136 @@ addEventListener('hashchange', () => {
   scrollTo(0, 0);
 });
 
-async function telaLogin(modo = 'entrar') {
+const LOGO_LOGIN = `<div class="logo-login"><img src="assets/logo.jpg" alt="Cabral Transportes — cargas pesadas, grandes destinos" width="640" height="640"></div>`;
+
+function formularioConta({ titulo, nota = '', campos, botao, links = '', aoEnviar }) {
   document.body.classList.add('sem-sessao');
-  const criar = modo === 'criar';
   $conteudo().innerHTML = `<form class="login cartao" novalidate>
-    <div class="logo-login"><img src="assets/logo.jpg" alt="Cabral Transportes — cargas pesadas, grandes destinos" width="640" height="640"></div>
-    <h1>${criar ? 'Criar login' : 'Controle de Frota'}</h1>
-    ${criar ? '<p class="nota">Crie seu login com e-mail e senha. O sistema aceita no máximo 2 logins, e os dois veem os mesmos dados.</p>' : ''}
-    <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
-    <label>Senha <input name="senha" type="password" autocomplete="${criar ? 'new-password' : 'current-password'}" required></label>
-    ${criar ? '<label>Repita a senha <input name="senha2" type="password" autocomplete="new-password" required></label>' : ''}
+    ${LOGO_LOGIN}
+    <h1>${titulo}</h1>
+    ${nota ? `<p class="nota">${nota}</p>` : ''}
+    ${campos}
     <p class="erro" role="alert" hidden></p>
     <p class="nota" data-ok hidden></p>
-    <button class="btn" type="submit">${criar ? 'Criar login' : 'Entrar'}</button>
-    <button class="link" type="button" data-trocar>${criar ? 'Já tenho login — entrar' : 'Primeiro acesso? Criar login'}</button>
+    <button class="btn" type="submit">${botao}</button>
+    ${links}
   </form>`;
   const form = $conteudo().querySelector('form');
-  form.querySelector('[data-trocar]').onclick = () => telaLogin(criar ? 'entrar' : 'criar');
   form.onsubmit = async e => {
     e.preventDefault();
     const erro = form.querySelector('.erro');
     erro.hidden = true;
-    const email = form.email.value.trim(), senha = form.senha.value;
+    const btn = form.querySelector('[type=submit]');
+    btn.disabled = true;
     try {
-      if (!email || !senha) throw new Error('Preencha e-mail e senha.');
-      if (criar) {
-        if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
-        if (senha !== form.senha2.value) throw new Error('As senhas não são iguais.');
-        const entrou = await db.cadastrar(email, senha);
-        if (!entrou) {
-          const ok = form.querySelector('[data-ok]');
-          ok.innerHTML = `<strong>Login criado!</strong> Enviamos um e-mail de confirmação para ${esc(email)}. Abra o link do e-mail (mesmo que a página aberta dê erro) e depois volte aqui e clique em "Já tenho login — entrar".`;
-          ok.hidden = false;
-          form.querySelector('[type=submit]').hidden = true;
-          return;
-        }
-      } else {
-        await db.entrar(email, senha);
+      const ok = await aoEnviar(form);
+      if (ok) {
+        const el = form.querySelector('[data-ok]');
+        el.innerHTML = ok;
+        el.hidden = false;
+        btn.hidden = true;
       }
-      document.body.classList.remove('sem-sessao');
-      await iniciarSessao();
     } catch (err) {
       erro.textContent = err.message;
       erro.hidden = false;
+    } finally {
+      btn.disabled = false;
     }
   };
+  form.querySelectorAll('[data-ir]').forEach(b => { b.onclick = () => telaLogin(b.dataset.ir); });
+  form.querySelector('input')?.focus();
+  return form;
+}
+
+const campoEmail = '<label>E-mail <input name="email" type="email" autocomplete="username" required></label>';
+const linkConta = (modo, texto) => `<button class="link" type="button" data-ir="${modo}">${texto}</button>`;
+
+function entrarNoSistema() {
+  document.body.classList.remove('sem-sessao');
+  history.replaceState(null, '', location.pathname + '#/resumo');
+  return iniciarSessao();
+}
+
+function telaLogin(modo = 'entrar', mensagemErro = '') {
+  if (modo === 'criar') {
+    return formularioConta({
+      titulo: 'Criar login',
+      nota: 'Crie seu login com e-mail e senha. O sistema aceita no máximo 2 logins, e os dois veem os mesmos dados.',
+      campos: `${campoEmail}
+        <label>Senha <input name="senha" type="password" autocomplete="new-password" required></label>
+        <label>Repita a senha <input name="senha2" type="password" autocomplete="new-password" required></label>`,
+      botao: 'Criar login',
+      links: linkConta('entrar', 'Já tenho login — entrar'),
+      async aoEnviar(form) {
+        const email = form.email.value.trim(), senha = form.senha.value;
+        if (!email || !senha) throw new Error('Preencha e-mail e senha.');
+        if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+        if (senha !== form.senha2.value) throw new Error('As senhas não são iguais.');
+        if (await db.cadastrar(email, senha)) { await entrarNoSistema(); return null; }
+        return `<strong>Login criado!</strong> Enviamos um e-mail de confirmação para ${esc(email)}. Abra o link do e-mail; ele traz você de volta já conectado.`;
+      },
+    });
+  }
+  if (modo === 'esqueci') {
+    return formularioConta({
+      titulo: 'Esqueci minha senha',
+      nota: 'Informe o e-mail do login. Você vai receber um link para criar uma senha nova.',
+      campos: campoEmail,
+      botao: 'Enviar link',
+      links: linkConta('entrar', 'Voltar para entrar'),
+      async aoEnviar(form) {
+        const email = form.email.value.trim();
+        if (!email) throw new Error('Preencha o e-mail.');
+        await db.recuperarSenha(email);
+        return `Se ${esc(email)} tiver login, o link chega em alguns minutos. Confira também a caixa de spam.`;
+      },
+    });
+  }
+  const form = formularioConta({
+    titulo: 'Controle de Frota',
+    campos: `${campoEmail}
+      <label>Senha <input name="senha" type="password" autocomplete="current-password" required></label>`,
+    botao: 'Entrar',
+    links: `${linkConta('esqueci', 'Esqueci minha senha')} ${linkConta('criar', 'Primeiro acesso? Criar login')}`,
+    async aoEnviar(form) {
+      const email = form.email.value.trim(), senha = form.senha.value;
+      if (!email || !senha) throw new Error('Preencha e-mail e senha.');
+      await db.entrar(email, senha);
+      await entrarNoSistema();
+      return null;
+    },
+  });
+  if (mensagemErro) {
+    const erro = form.querySelector('.erro');
+    erro.textContent = mensagemErro;
+    erro.hidden = false;
+  }
+  return form;
+}
+
+// Depois do link "Esqueci minha senha" (já conectado) ou pela tela Dados.
+function telaNovaSenha(voltarParaDados = false) {
+  formularioConta({
+    titulo: 'Criar nova senha',
+    campos: `<label>Nova senha <input name="senha" type="password" autocomplete="new-password" required></label>
+      <label>Repita a nova senha <input name="senha2" type="password" autocomplete="new-password" required></label>`,
+    botao: 'Salvar nova senha',
+    links: voltarParaDados ? '<button class="link" type="button" data-cancelar>Cancelar</button>' : '',
+    async aoEnviar(form) {
+      const senha = form.senha.value;
+      if (senha.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.');
+      if (senha !== form.senha2.value) throw new Error('As senhas não são iguais.');
+      await db.trocarSenha(senha);
+      aviso('Senha alterada.');
+      await entrarNoSistema();
+      return null;
+    },
+  });
+  $conteudo().querySelector('[data-cancelar]')?.addEventListener('click', () => {
+    document.body.classList.remove('sem-sessao');
+    location.hash = '#/dados';
+    render();
+  });
 }
 
 async function iniciarSessao() {
@@ -561,7 +768,10 @@ async function iniciarSessao() {
   try {
     await S.recarregar();
   } catch (err) {
-    $conteudo().innerHTML = `<div class="banner erro">Não foi possível carregar os dados: ${esc(err.message)}</div>`;
+    const bancoDesatualizado = /clientes|criado_por|cliente_id|vencimento|schema cache/.test(err.message);
+    $conteudo().innerHTML = bancoDesatualizado
+      ? `<div class="banner erro"><strong>O banco precisa ser atualizado.</strong> No Supabase, abra o SQL Editor, cole o arquivo supabase/schema.sql inteiro e clique em Run. Depois recarregue esta página.</div>`
+      : `<div class="banner erro">Não foi possível carregar os dados: ${esc(err.message)}</div>`;
     return;
   }
   render();
@@ -570,8 +780,20 @@ async function iniciarSessao() {
 async function iniciar() {
   iniciarAjuda();
   if (db.modo === 'local') document.getElementById('demo').hidden = false;
-  if (!(await db.usuario())) return telaLogin();
+  db.aoRecuperarSenha(() => telaNovaSenha());
+  const usuario = await db.usuario();
+  // Links do e-mail deixam dados no "#"; limpa para não confundir a navegação.
+  if (/access_token|error_description|type=/.test(location.hash)) history.replaceState(null, '', location.pathname + '#/resumo');
+  if (chegouPorRecuperacao && usuario) return telaNovaSenha();
+  if (!usuario) {
+    return telaLogin('entrar', erroNoLink ? 'O link do e-mail é inválido ou expirou. Peça um novo em "Esqueci minha senha".' : '');
+  }
   iniciarSessao();
 }
 
 iniciar();
+
+// Instalar como aplicativo (funciona também sem internet para abrir as telas).
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

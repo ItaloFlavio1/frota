@@ -178,3 +178,80 @@ export function proximoVencimento({ km, data, intervalo_km, intervalo_dias }) {
 }
 
 const fmtNum = n => Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+
+// ---------------------------------------------------------------------------
+// Painel: agregados por mês/ano (usam as mesmas regras do Resumo)
+// ---------------------------------------------------------------------------
+const p2 = n => String(n).padStart(2, '0');
+export const fimDoMes = (ano, mes) => `${ano}-${p2(mes)}-${p2(new Date(ano, mes, 0).getDate())}`;
+
+export function anosComDados(d) {
+  const anos = new Set([Number(hojeISO().slice(0, 4))]);
+  for (const f of d.fretes) if (f.data) anos.add(Number(f.data.slice(0, 4)));
+  for (const x of d.despesas) if (x.data_gasto) anos.add(Number(x.data_gasto.slice(0, 4)));
+  return [...anos].sort();
+}
+
+// Distância das viagens com km inicial e final, pela data de saída.
+export function kmRodados(d, caminhaoIds, ini, fim) {
+  return d.viagens
+    .filter(v => caminhaoIds.includes(v.caminhao_id) && noPeriodo(v.data_inicio, ini, fim)
+      && v.km_inicial != null && v.km_inicial !== '' && v.km_final != null && v.km_final !== '')
+    .reduce((s, v) => s + (Number(v.km_final) - Number(v.km_inicial)), 0);
+}
+
+export function dieselNoPeriodo(d, caminhaoIds, ini, fim) {
+  const abs = d.abastecimentos.filter(a => caminhaoIds.includes(a.caminhao_id) && noPeriodo(a.data, ini, fim));
+  const litros = abs.reduce((s, a) => s + Number(a.litros), 0);
+  const totalC = abs.reduce((s, a) => s + centavos(a.total), 0);
+  return { litros, totalC, precoMedio: litros > 0 ? totalC / 100 / litros : null };
+}
+
+export function indicadores(d, caminhaoIds, ini, fim) {
+  const r = somarResumos(caminhaoIds.map(id => resumoCaminhao(d, id, ini, fim)));
+  const km = kmRodados(d, caminhaoIds, ini, fim);
+  return {
+    ...r, km, diesel: dieselNoPeriodo(d, caminhaoIds, ini, fim),
+    margem: r.faturadoC > 0 ? r.resultadoC / r.faturadoC : null,
+    custoKmC: km > 0 ? Math.round(r.despesasC / km) : null,
+  };
+}
+
+export function serieMensal(d, caminhaoIds, ano) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const ini = `${ano}-${p2(i + 1)}-01`, fim = fimDoMes(ano, i + 1);
+    return { mes: i + 1, ...indicadores(d, caminhaoIds, ini, fim) };
+  });
+}
+
+export function despesasPorCategoria(d, caminhaoIds, ini, fim) {
+  const tot = {};
+  for (const x of d.despesas) {
+    if (!caminhaoIds.includes(x.caminhao_id) || !noPeriodo(x.data_gasto, ini, fim)) continue;
+    tot[x.categoria] = (tot[x.categoria] || 0) + centavos(x.valor);
+  }
+  return Object.entries(tot).map(([categoria, c]) => ({ categoria, c })).sort((a, b) => b.c - a.c);
+}
+
+// ---------------------------------------------------------------------------
+// Clientes: a receber e atrasados
+// ---------------------------------------------------------------------------
+export function fretesEmAberto(d, hoje = hojeISO()) {
+  return d.fretes
+    .map(f => ({ f, faltaC: aReceberDoFrete(d, f) }))
+    .filter(x => x.faltaC > 0)
+    .map(x => ({ ...x, atrasado: !!x.f.vencimento && x.f.vencimento < hoje }));
+}
+
+export function receberPorCliente(d, hoje = hojeISO()) {
+  const porCliente = new Map();
+  for (const x of fretesEmAberto(d, hoje)) {
+    const k = x.f.cliente_id || '';
+    const atual = porCliente.get(k) || { clienteId: k || null, aReceberC: 0, atrasadoC: 0, fretes: [] };
+    atual.aReceberC += x.faltaC;
+    if (x.atrasado) atual.atrasadoC += x.faltaC;
+    atual.fretes.push(x);
+    porCliente.set(k, atual);
+  }
+  return [...porCliente.values()].sort((a, b) => b.aReceberC - a.aReceberC);
+}

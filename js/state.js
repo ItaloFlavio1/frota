@@ -13,6 +13,9 @@ export async function recarregar() {
 export const caminhao = id => D.caminhoes.find(c => c.id === id);
 export const viagem = id => D.viagens.find(v => v.id === id);
 export const frete = id => D.fretes.find(f => f.id === id);
+export const cliente = id => D.clientes.find(c => c.id === id);
+// Quem lançou: parte do e-mail antes do "@" (registros antigos não têm).
+export const autor = x => x?.criado_por ? x.criado_por.split('@')[0] : '';
 export const ordenarPorData = (lista, campo = 'data') =>
   [...lista].sort((a, b) => (b[campo] || '').localeCompare(a[campo] || '') || (b.created_at || '').localeCompare(a.created_at || ''));
 
@@ -41,6 +44,11 @@ const salvar = (tabela, id, dados) => id ? db.atualizar(tabela, id, dados) : db.
 // ---------------------------------------------------------------------------
 export async function salvarCaminhao(id, dados) {
   await salvar('caminhoes', id, dados);
+  await recarregar();
+}
+
+export async function salvarCliente(id, dados) {
+  await salvar('clientes', id, dados);
   await recarregar();
 }
 

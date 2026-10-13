@@ -31,6 +31,13 @@ export const AJUDA = {
   intervalo: ['intervalo da manutenção', 'De quantos em quantos km e/ou dias o serviço se repete. Ao registrar a execução, o próximo vencimento é calculado. Exemplo: feito com 120.000 km, intervalo 20.000 → próximo em 140.000 km.'],
   aviso: ['faixa de aviso', 'Quanto antes do vencimento o sistema começa a avisar. Padrão: 1.000 km ou 30 dias.'],
   media_real: ['média real', 'Km rodados entre dois tanques completos ÷ litros abastecidos nesse intervalo (inclusive abastecimentos parciais no meio).'],
+  cliente: ['cliente', 'Quem contratou o frete. Serve para ver quanto cada cliente deve. Cadastre clientes na tela Clientes.'],
+  vencimento: ['vencimento do pagamento', 'Data combinada para o cliente pagar. Depois dela, o valor que falta aparece como atrasado.'],
+  atrasados: ['recebimentos atrasados', 'Fretes com vencimento já passado e que ainda têm valor a receber.'],
+  margem: ['margem', 'Resultado operacional ÷ faturamento. Exemplo: R$ 2.000 de resultado em R$ 10.000 faturados = 20%.'],
+  custo_km_periodo: ['custo por km', 'Despesas registradas no período ÷ km rodados nas viagens do período (pela data de saída).'],
+  km_rodados: ['km rodados', 'Soma das distâncias das viagens (km final − km inicial), pela data de saída. Viagens sem km final não entram.'],
+  preco_medio_diesel: ['preço médio do diesel', 'Total pago em abastecimentos ÷ litros abastecidos.'],
   status_viagem: ['situação da viagem', 'Planejada, em andamento, concluída ou cancelada. Serve para organizar a lista.'],
 };
 

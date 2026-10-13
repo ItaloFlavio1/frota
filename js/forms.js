@@ -108,6 +108,28 @@ export function formCaminhao(c = null) {
   });
 }
 
+export function formCliente(cl = null) {
+  abrirFormulario({
+    titulo: cl ? 'Editar cliente' : 'Novo cliente',
+    html: `
+      ${campo({ nome: 'nome', rotulo: 'Nome', valor: cl?.nome, obrigatorio: true, attrs: 'placeholder="Ex.: Cooperativa Agro Sul"' })}
+      <div class="linha">
+        ${campo({ nome: 'documento', rotulo: 'CNPJ/CPF (opcional)', valor: cl?.documento })}
+        ${campo({ nome: 'telefone', rotulo: 'Telefone (opcional)', tipo: 'tel', valor: cl?.telefone })}
+      </div>
+      ${campo({ nome: 'observacao', rotulo: 'Observação', tipo: 'textarea', valor: cl?.observacao })}
+      ${cl ? caixa({ nome: 'ativo', rotulo: 'Cliente ativo', marcado: cl.ativo }) : ''}`,
+    async aoSalvar(form) {
+      const v = valoresDe(form);
+      exigir(v.nome, 'Preencha o nome.');
+      exigir(!D.clientes.some(x => x.nome.toLowerCase() === v.nome.toLowerCase() && x.id !== cl?.id), 'Já existe um cliente com esse nome.');
+      await S.salvarCliente(cl?.id, { nome: v.nome, documento: v.documento || null, telefone: v.telefone || null,
+        observacao: v.observacao || null, ativo: cl ? v.ativo : true });
+      concluir('Cliente salvo.');
+    },
+  });
+}
+
 export function formHodometro(c) {
   abrirFormulario({
     titulo: 'Corrigir hodômetro',
@@ -133,6 +155,11 @@ function camposFrete(f, dataPadrao) {
     <div class="linha">
       ${campo({ nome: 'f_origem', rotulo: 'Origem da carga', valor: f?.origem })}
       ${campo({ nome: 'f_destino', rotulo: 'Destino da carga', valor: f?.destino })}
+    </div>
+    <div class="linha">
+      ${selecao({ nome: 'f_cliente_id', rotulo: 'Cliente', ajuda: 'cliente', vazio: 'Sem cliente',
+        opcoes: D.clientes.filter(c => c.ativo || c.id === f?.cliente_id).map(c => [c.id, c.nome]), valor: f?.cliente_id })}
+      ${campo({ nome: 'f_vencimento', rotulo: 'Vencimento do pagamento', tipo: 'date', valor: f?.vencimento, ajuda: 'vencimento' })}
     </div>
     <div class="segmentado" role="radiogroup" aria-label="Forma de cobrança">
       <label><input type="radio" name="f_modalidade" value="tonelada" ${mod === 'tonelada' ? 'checked' : ''}> Por tonelada</label>
@@ -170,7 +197,8 @@ function lerFrete(v, previa = false) {
   const pesoDigitado = numeroCampo(v.f_peso, 'o peso', { positivo: true, obrigatorio: modalidade === 'tonelada' && !previa });
   const peso_t = pesoDigitado === null ? null : Math.round(pesoEmToneladas(pesoDigitado, v.f_unidade) * 1000) / 1000;
   if (peso_t !== null) exigir(peso_t > 0, 'Peso muito pequeno.');
-  const f = { data: v.f_data, origem: v.f_origem || null, destino: v.f_destino || null, modalidade, peso_t };
+  const f = { data: v.f_data, origem: v.f_origem || null, destino: v.f_destino || null, modalidade, peso_t,
+    cliente_id: v.f_cliente_id || null, vencimento: v.f_vencimento || null };
   if (modalidade === 'tonelada') {
     f.preco_t = numeroCampo(v.f_preco_t, 'o valor por tonelada', { obrigatorio: !previa, minimo: 0 });
     if (f.preco_t !== null) f.preco_t = centavos(f.preco_t) / 100;

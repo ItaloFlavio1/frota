@@ -50,14 +50,36 @@ Na tela **Dados** há um botão para carregar um exemplo.
 
 Para atualizar o sistema depois, basta enviar os arquivos alterados ao repositório.
 
-## 3. Cuidados com o plano gratuito
+## 3. Backup automático (GitHub, a cada 3 dias)
+
+O arquivo `.github/workflows/backup.yml` baixa todo o banco a cada 3 dias, criptografa com
+uma senha sua e guarda por 90 dias em **Actions → Backup do banco → (execução) → Artifacts**.
+Ele também mantém o Supabase ativo, evitando a pausa por inatividade.
+
+Configuração (uma vez):
+1. Supabase → **Project Settings → API Keys** → copie a **Secret key** (`sb_secret_...`).
+2. GitHub → repositório → **Settings → Secrets and variables → Actions → New repository secret**:
+   - `SUPABASE_SECRET_KEY` = a secret key do passo 1
+   - `BACKUP_SENHA` = uma senha forte só para os backups (guarde-a; sem ela o backup não abre)
+3. Teste: **Actions → Backup do banco → Run workflow**. Deve terminar com ✅.
+
+Restaurar: baixe o artifact, descompacte o `.zip` e, no sistema, use **Dados → Restaurar**
+escolhendo o arquivo `.enc` (o sistema pede a `BACKUP_SENHA`).
+
+## 4. Instalar no celular
+
+Abra o site no celular e use **Adicionar à tela inicial** (Chrome: menu ⋮ → *Instalar app*;
+iPhone/Safari: botão Compartilhar → *Adicionar à Tela de Início*). Abre em tela cheia com a logo.
+
+## 5. Cuidados com o plano gratuito
 
 - **Cópia de segurança:** o plano gratuito do Supabase não oferece backup para baixar.
   Use a tela **Dados → Baixar cópia de segurança** uma vez por semana e guarde o arquivo
   (Google Drive, e-mail, pendrive). O mesmo arquivo restaura os dados.
 - **Pausa por inatividade:** projetos gratuitos do Supabase são pausados após cerca de
-  7 dias sem nenhum acesso. Os dados não se perdem; basta entrar no painel do Supabase e
-  clicar em **Restore project**. Com uso semanal isso não acontece.
+  7 dias sem nenhum acesso. O backup automático acessa o banco a cada 3 dias e evita isso.
+  Se mesmo assim pausar, os dados não se perdem: entre no painel do Supabase e clique em
+  **Restore project**.
 - **Histórico de alterações:** toda criação, edição ou exclusão de frete, recebimento,
   despesa, abastecimento e manutenção fica registrada na tabela `auditoria`
   (Supabase → Table Editor).
@@ -75,6 +97,11 @@ Para atualizar o sistema depois, basta enviar os arquivos alterados ao repositó
 | `js/forms.js` | Formulários |
 | `js/help.js` | Textos e funcionamento dos ícones "?" |
 | `js/app.js` | Telas e navegação |
+| `js/painel.js` | Painel com gráficos (Chart.js) |
+| `js/relatorio.js` | Planilha Excel (SheetJS) |
+| `js/cripto.js` | Abre o backup automático criptografado |
+| `sw.js`, `manifest.webmanifest` | Instalação como aplicativo |
+| `scripts/backup.py`, `.github/workflows/backup.yml` | Backup automático |
 | `supabase/schema.sql` | Tabelas, segurança e histórico |
 | `tests/calc.html` | Testes dos cálculos (abra no navegador com um servidor local) |
 

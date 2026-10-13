@@ -1,0 +1,16 @@
+{
+  "name": "Cabral Transportes — Controle de Frota",
+  "short_name": "Cabral Frota",
+  "description": "Controle de caminhões, fretes, despesas e manutenções.",
+  "lang": "pt-BR",
+  "start_url": "./#/resumo",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
+  "icons": [
+    { "src": "assets/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

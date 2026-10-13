@@ -23,6 +23,20 @@ create table if not exists caminhoes (
 );
 
 -- ---------------------------------------------------------------------
+-- Clientes (contratantes dos fretes)
+-- ---------------------------------------------------------------------
+create table if not exists clientes (
+  id          uuid primary key default gen_random_uuid(),
+  owner_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  nome        text not null,
+  documento   text,
+  telefone    text,
+  observacao  text,
+  ativo       boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
 -- Viagens (uma viagem pode ter um ou mais fretes)
 -- ---------------------------------------------------------------------
 create table if not exists viagens (
@@ -186,7 +200,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['fretes','recebimentos','despesas','abastecimentos','manutencoes'] loop
+  foreach t in array array['fretes','recebimentos','despesas','abastecimentos','manutencoes','clientes'] loop
     execute format('drop trigger if exists trg_auditoria on %I', t);
     execute format('create trigger trg_auditoria after insert or update or delete on %I
                     for each row execute function registrar_auditoria()', t);
@@ -223,7 +237,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['caminhoes','viagens','fretes','recebimentos','abastecimentos',
-                           'planos_manutencao','manutencoes','despesas'] loop
+                           'planos_manutencao','manutencoes','despesas','clientes'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists dono on %I', t);
     execute format('drop policy if exists frota on %I', t);
@@ -263,3 +277,20 @@ end $$;
 drop trigger if exists trg_limitar_cadastros on auth.users;
 create trigger trg_limitar_cadastros before insert on auth.users
   for each row execute function limitar_cadastros();
+
+-- ---------------------------------------------------------------------
+-- Versão 2: cliente e vencimento no frete; registro de quem lançou
+-- ---------------------------------------------------------------------
+alter table fretes add column if not exists cliente_id uuid references clientes(id);
+alter table fretes add column if not exists vencimento date;
+create index if not exists idx_fretes_cliente on fretes(cliente_id);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['caminhoes','viagens','fretes','recebimentos','abastecimentos',
+                           'planos_manutencao','manutencoes','despesas','clientes'] loop
+    execute format('alter table %I add column if not exists criado_por text
+                    default (auth.jwt() ->> ''email'')', t);
+  end loop;
+end $$;

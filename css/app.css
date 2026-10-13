@@ -18,6 +18,8 @@
   --aviso-borda: #e7b400;
   --atrasada: #c8141c;
   --proxima: #a16207;
+  --serie-receita: #3d6aa8;
+  --serie-despesa: #d3131b;
   --raio: 10px;
   --sombra: 0 1px 3px rgba(0, 0, 0, .08);
   color-scheme: light;
@@ -29,6 +31,7 @@
     --topo: #000000; --topo-texto: #ffffff;
     --perigo: #ff6b70; --ok: #4ade80; --aviso-fundo: #33290a; --aviso-borda: #a37f00;
     --atrasada: #ff5c62; --proxima: #fbbf24; --sombra: none; color-scheme: dark;
+    --serie-receita: #5b8bd0; --serie-despesa: #ef4444;
   }
 }
 :root[data-theme="dark"] {
@@ -37,6 +40,7 @@
   --topo: #000000; --topo-texto: #ffffff;
   --perigo: #ff6b70; --ok: #4ade80; --aviso-fundo: #33290a; --aviso-borda: #a37f00;
   --atrasada: #ff5c62; --proxima: #fbbf24; --sombra: none; color-scheme: dark;
+  --serie-receita: #5b8bd0; --serie-despesa: #ef4444;
 }
 
 * { box-sizing: border-box; }
@@ -63,7 +67,7 @@ small { color: var(--suave); }
 .topo .btn.novo { background: var(--primaria); color: #fff; }
 .topo .btn.novo:hover { background: var(--primaria-forte); }
 .menu {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: grid; grid-template-columns: repeat(6, 1fr);
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--superficie); border-top: 1px solid var(--borda);
 }
 .menu a {
@@ -71,6 +75,7 @@ small { color: var(--suave); }
   font-size: .7rem; text-decoration: none; color: var(--suave);
 }
 .menu a span { font-size: 1.25rem; }
+.menu .so-desktop { display: none; }
 .menu a[aria-current] { color: var(--primaria); font-weight: 700; box-shadow: inset 0 3px 0 var(--primaria); }
 main { max-width: 1100px; margin: 0 auto; padding: 16px; outline: none; }
 .sem-sessao .menu, .sem-sessao .topo { display: none; }
@@ -82,6 +87,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; outline: none; }
     padding-top: 8px; border-top: 0; border-right: 1px solid var(--borda);
   }
   .menu a { flex-direction: row; gap: 10px; font-size: .95rem; padding: 12px 20px; }
+  .menu .so-desktop { display: flex; }
+  .menu .so-celular { display: none; }
   .menu a[aria-current] { background: var(--primaria-clara); box-shadow: inset 4px 0 0 var(--primaria); }
   .topo { margin-left: -200px; padding-left: 20px; z-index: 6; min-height: 60px; }
   .menu { top: 63px; }
@@ -282,4 +289,36 @@ main .faixa-caminhao { border-radius: 8px; border: 1px solid var(--borda); margi
 @media (max-width: 480px) {
   .topo .btn.novo { padding: 6px 10px; font-size: .88rem; }
   h1 { font-size: 1.25rem; }
+}
+
+/* Painel */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 10px; margin: 0 0 14px; }
+.tile { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px 14px; box-shadow: var(--sombra); }
+.tile dt { display: flex; align-items: center; gap: 4px; font-size: .82rem; color: var(--suave); }
+.tile dd { margin: 4px 0 0; font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile small { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.grade-graficos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 14px; }
+.grafico-cartao { margin: 0; min-width: 0; }
+.grafico-cartao h2 { margin: 0; font-size: 1rem; }
+.grafico-cartao .sub { margin: 2px 0 10px; font-size: .82rem; color: var(--suave); }
+.grafico { position: relative; width: 100%; }
+.tabela-dados { margin-top: 10px; font-size: .85rem; }
+.tabela-dados summary { cursor: pointer; color: var(--link); }
+.rolagem { overflow-x: auto; }
+.tabela-dados table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.tabela-dados th, .tabela-dados td { padding: 4px 8px; border-bottom: 1px solid var(--borda); text-align: left; white-space: nowrap; }
+.tabela-dados td.num, .tabela-dados th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.alertas h2 small { font-weight: 600; color: var(--atrasada); }
+.login .link { justify-self: center; }
+
+/* Impressão / PDF */
+@media print {
+  @page { margin: 12mm; }
+  body { padding: 0 !important; background: #fff; color: #000; }
+  .topo, .menu, #demo, .nao-imprimir, .filtros, .ajuda, .tabela-dados summary, .toast, dialog { display: none !important; }
+  .tabela-dados { display: block; }
+  .tabela-dados[open] summary ~ *, .tabela-dados > div { display: block; }
+  main { max-width: none; padding: 0; }
+  .cartao, .tile { box-shadow: none; break-inside: avoid; }
+  .grade-graficos { grid-template-columns: 1fr 1fr; }
 }

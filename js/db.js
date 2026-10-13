@@ -1,7 +1,7 @@
 // Camada de dados: mesma interface para Supabase (produção) e localStorage (demonstração).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABELAS = ['caminhoes', 'viagens', 'fretes', 'recebimentos', 'abastecimentos',
+export const TABELAS = ['caminhoes', 'clientes', 'viagens', 'fretes', 'recebimentos', 'abastecimentos',
   'planos_manutencao', 'manutencoes', 'despesas'];
 
 function uuid() {
@@ -15,6 +15,15 @@ function uuid() {
 // ---------------------------------------------------------------------------
 // Supabase
 // ---------------------------------------------------------------------------
+// Links do e-mail (confirmação de cadastro / nova senha) chegam com dados no "#".
+// Lidos antes do Supabase limpar o endereço.
+const hashInicial = location.hash;
+export const chegouPorRecuperacao = hashInicial.includes('type=recovery');
+export const erroNoLink = (() => {
+  const m = hashInicial.match(/error_description=([^&]+)/);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+})();
+
 function criarSupabase() {
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const erro = e => { if (e) throw new Error(traduzirErro(e.message)); };
@@ -35,6 +44,17 @@ function criarSupabase() {
       });
       erro(error);
       return !!data.session;
+    },
+    async recuperarSenha(email) {
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      erro(error);
+    },
+    async trocarSenha(senha) {
+      const { error } = await sb.auth.updateUser({ password: senha });
+      erro(error);
+    },
+    aoRecuperarSenha(fn) {
+      sb.auth.onAuthStateChange(evento => { if (evento === 'PASSWORD_RECOVERY') fn(); });
     },
     async sair() { await sb.auth.signOut(); },
     async listar(tabela) {
@@ -81,6 +101,8 @@ function traduzirErro(msg = '') {
   if (msg.includes('Email not confirmed')) return 'E-mail ainda não confirmado. Abra o link que chegou no seu e-mail e tente de novo.';
   if (msg.includes('Database error saving new user') || msg.includes('Cadastro fechado')) return 'Os 2 logins deste sistema já foram criados. Use a opção Entrar.';
   if (msg.includes('Password should be')) return 'A senha precisa ter pelo menos 6 caracteres.';
+  if (msg.includes('different from the old password')) return 'A nova senha precisa ser diferente da anterior.';
+  if (msg.includes('Auth session missing')) return 'O link expirou. Peça um novo em "Esqueci minha senha".';
   if (msg.includes('User already registered')) return 'Este e-mail já tem login. Use a opção Entrar.';
   if (msg.includes('rate limit')) return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
   if (msg.includes('caminhoes_owner_id_placa_key')) return 'Já existe um caminhão com essa placa.';
@@ -107,6 +129,9 @@ function criarLocal() {
     modo: 'local',
     async usuario() { return { email: 'demonstracao' }; },
     async entrar() {},
+    async recuperarSenha() {},
+    async trocarSenha() {},
+    aoRecuperarSenha() {},
     async sair() {},
     async listar(tabela) { return copia(dados[tabela]); },
     async inserir(tabela, linha) {

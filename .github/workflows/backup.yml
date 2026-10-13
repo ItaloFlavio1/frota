@@ -1,0 +1,52 @@
+# Backup automático do banco a cada 3 dias (também mantém o Supabase gratuito ativo).
+# O arquivo fica criptografado em Actions → execução → Artifacts, por 90 dias.
+# Para restaurar: baixe, descompacte o .zip e use Dados → Restaurar no sistema (pede a BACKUP_SENHA).
+name: Backup do banco
+
+on:
+  schedule:
+    - cron: '17 9 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar dados do Supabase
+        env:
+          SUPABASE_URL: https://hgmcawgafnspenhbqgue.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: python3 scripts/backup.py > backup.json
+
+      - name: Criptografar
+        env:
+          BACKUP_SENHA: ${{ secrets.BACKUP_SENHA }}
+        run: |
+          if [ -z "$BACKUP_SENHA" ]; then echo "::error::Cadastre o segredo BACKUP_SENHA no GitHub."; exit 1; fi
+          echo "ARQUIVO=frota-backup-$(date -u +%F).enc" >> "$GITHUB_ENV"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt \
+            -in backup.json -out "frota-backup-$(date -u +%F).enc" -pass env:BACKUP_SENHA
+          rm backup.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARQUIVO }}
+          path: ${{ env.ARQUIVO }}
+          retention-days: 90
+
+      # O GitHub desliga agendamentos de repositórios sem atividade há 60 dias.
+      # Uma vez por mês registra a data do último backup (sem nenhum dado) para manter ativo.
+      - name: Manter agendamento ativo
+        run: |
+          if [ "$(date -u +%d)" -le 03 ]; then
+            date -u +%F > backup/ultimo-backup.txt
+            git config user.name "backup-automatico"
+            git config user.email "backup-automatico@users.noreply.github.com"
+            git add backup/ultimo-backup.txt
+            git commit -m "Backup automático: $(date -u +%F)" && git push || true
+          fi
