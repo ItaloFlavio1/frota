@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Testes de cálculo</title></head>
+<body><pre id="saida">rodando…</pre>
+<script type="module">
+import * as C from '../js/calc.js';
+
+const linhas = [];
+let falhas = 0;
+function ok(nome, obtido, esperado) {
+  const passou = JSON.stringify(obtido) === JSON.stringify(esperado);
+  if (!passou) falhas++;
+  linhas.push(`${passou ? 'OK  ' : 'FALHOU'} ${nome}${passou ? '' : ` — obtido ${JSON.stringify(obtido)}, esperado ${JSON.stringify(esperado)}`}`);
+}
+
+// Frete
+ok('32 t × R$ 150 = R$ 4.800', C.valorBrutoFrete({ modalidade: 'tonelada', peso_t: 32, preco_t: 150 }), 4800);
+ok('32.000 kg = 32 t', C.pesoEmToneladas(32000, 'kg'), 32);
+ok('frete fechado', C.valorBrutoFrete({ modalidade: 'fechado', valor_fechado: 5000.5 }), 5000.5);
+ok('arredondamento meio para cima (0,005)', C.valorBrutoFrete({ modalidade: 'tonelada', peso_t: 0.5, preco_t: 0.01 }), 0.01);
+ok('32,457 t × R$ 151,33', C.valorBrutoFrete({ modalidade: 'tonelada', peso_t: 32.457, preco_t: 151.33 }), 4911.72);
+ok('0,1 + 0,2 em centavos', C.centavos(0.1) + C.centavos(0.2), 30);
+
+// Cenário do planejamento
+const d = {
+  caminhoes: [{ id: 'A', hodometro: 119500 }, { id: 'B', hodometro: 80000 }],
+  viagens: [
+    { id: 'v1', caminhao_id: 'A', km_inicial: 118700, km_final: 119500, media_kml_ref: 2.5, preco_diesel_ref: 6 },
+    { id: 'v2', caminhao_id: 'B', km_inicial: 1000, km_final: null, media_kml_ref: 2.7, preco_diesel_ref: 6 },
+  ],
+  fretes: [
+    { id: 'f1', viagem_id: 'v1', data: '2026-10-02', valor_bruto: 4800 },
+    { id: 'f2', viagem_id: 'v2', data: '2026-09-28', valor_bruto: 3000 },
+  ],
+  recebimentos: [
+    { id: 'r1', frete_id: 'f1', data: '2026-10-05', valor: 2000 },
+    { id: 'r2', frete_id: 'f2', data: '2026-10-03', valor: 3000 },
+  ],
+  despesas: [
+    { id: 'd1', caminhao_id: 'A', viagem_id: 'v1', valor: 300, data_gasto: '2026-10-03', pago: true, data_pagamento: '2026-10-03' },
+    { id: 'd2', caminhao_id: 'A', viagem_id: 'v1', valor: 150, data_gasto: '2026-10-03', pago: true, data_pagamento: '2026-10-03' },
+    { id: 'd3', caminhao_id: 'A', viagem_id: null, valor: 2500, data_gasto: '2026-10-02', pago: true, data_pagamento: '2026-10-02', abastecimento_id: 'ab1' },
+    { id: 'd4', caminhao_id: 'B', viagem_id: null, valor: 1200, data_gasto: '2026-10-01', pago: false, data_pagamento: null },
+  ],
+};
+const rv = C.resumoViagem(d, d.viagens[0]);
+ok('viagem: distância 800 km', rv.distancia, 800);
+ok('viagem: 320 litros', rv.litros, 320);
+ok('viagem: diesel estimado R$ 1.920', rv.dieselC, 192000);
+ok('viagem: despesas vinculadas R$ 450 (abastecimento fora)', rv.despesasC, 45000);
+ok('viagem: resultado estimado R$ 2.430', rv.resultadoC, 243000);
+ok('viagem: custo por km R$ 2,96', rv.custoKmC, 296);
+const rv2 = C.resumoViagem(d, d.viagens[1]);
+ok('viagem sem km final: incompleta', [rv2.completo, rv2.faltando], [false, ['km final']]);
+ok('viagem sem km final: custo/km indisponível', rv2.custoKmC, null);
+
+ok('a receber após recebimento parcial', C.aReceberDoFrete(d, d.fretes[0]), 280000);
+
+const outubro = ['2026-10-01', '2026-10-31'];
+const a = C.resumoCaminhao(d, 'A', ...outubro);
+const b = C.resumoCaminhao(d, 'B', ...outubro);
+ok('A: faturado', a.faturadoC, 480000);
+ok('A: recebido', a.recebidoC, 200000);
+ok('A: despesas (abastecimento conta uma vez)', a.despesasC, 295000);
+ok('A: pagamentos', a.pagamentosC, 295000);
+ok('A: resultado operacional', a.resultadoC, 185000);
+ok('A: a receber', a.aReceberC, 280000);
+ok('B: frete de setembro não fatura em outubro', b.faturadoC, 0);
+ok('B: recebimento de outubro entra no caixa de outubro', b.recebidoC, 300000);
+ok('B: despesa pendente conta como despesa, não pagamento', [b.despesasC, b.pagamentosC], [120000, 0]);
+ok('despesa do A não altera o B', b.resultadoC, -120000);
+const tot = C.somarResumos([a, b]);
+ok('total da frota = soma dos caminhões', tot.faturadoC + tot.despesasC, a.faturadoC + b.faturadoC + a.despesasC + b.despesasC);
+
+// Manutenção
+const plano = { ativo: true, proximo_km: 120000, aviso_km: 1000, aviso_dias: 30 };
+ok('faltam 500 km → próxima', [C.statusPlano(plano, { hodometro: 119500 }).estado, C.statusPlano(plano, { hodometro: 119500 }).kmRestante], ['proxima', 500]);
+ok('120.100 km → atrasada 100 km', [C.statusPlano(plano, { hodometro: 120100 }).estado, C.statusPlano(plano, { hodometro: 120100 }).kmRestante], ['atrasada', -100]);
+ok('longe do vencimento → em dia', C.statusPlano(plano, { hodometro: 100000 }).estado, 'em_dia');
+const p2 = { ativo: true, proximo_km: 200000, proxima_data: '2026-10-10', aviso_km: 1000, aviso_dias: 30 };
+ok('km ok mas data vencida → atrasada', C.statusPlano(p2, { hodometro: 100000 }, '2026-10-13').estado, 'atrasada');
+ok('próximo vencimento com intervalos', C.proximoVencimento({ km: 120000, data: '2026-10-13', intervalo_km: 20000, intervalo_dias: 180 }),
+  { proximo_km: 140000, proxima_data: '2027-04-11', ativo: true });
+ok('sem intervalo não inventa vencimento', C.proximoVencimento({ km: 120000, data: '2026-10-13' }),
+  { proximo_km: null, proxima_data: null, ativo: false });
+
+// Média real
+const abs = [
+  { data: '2026-10-01', hodometro: 100000, litros: 300, tanque_cheio: true },
+  { data: '2026-10-03', hodometro: 100500, litros: 100, tanque_cheio: false },
+  { data: '2026-10-05', hodometro: 101000, litros: 300, tanque_cheio: true },
+];
+const mr = C.mediaReal(abs);
+ok('média real inclui abastecimento parcial', [mr.km, mr.litros, mr.geral], [1000, 400, 2.5]);
+ok('sem dois tanques cheios: dados insuficientes', C.mediaReal(abs.slice(0, 2)), null);
+
+linhas.push('', falhas ? `${falhas} FALHA(S)` : 'TODOS OS TESTES PASSARAM');
+document.getElementById('saida').textContent = linhas.join('\n');
+</script>
+</body></html>
