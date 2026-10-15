@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Cabral Frota">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app.css?v=menu-jogo-1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -24,7 +24,7 @@
   </div>
   <nav class="menu" aria-label="Menu principal">
     <a href="#/resumo"><span aria-hidden="true">📊</span>Resumo</a>
-    <a href="#/painel"><span aria-hidden="true">📈</span>Painel</a>
+    <a class="so-desktop" href="#/painel"><span aria-hidden="true">📈</span>Painel</a>
     <a href="#/viagens"><span aria-hidden="true">🛣️</span>Viagens</a>
     <a href="#/lancamentos"><span aria-hidden="true">🧾</span>Lançamentos</a>
     <a class="so-desktop" href="#/caminhoes"><span aria-hidden="true">🚚</span>Caminhões</a>
@@ -33,9 +33,10 @@
     <a class="so-desktop" href="#/manutencoes"><span aria-hidden="true">🔧</span>Manutenção</a>
     <a class="so-desktop" href="#/jogo"><span aria-hidden="true">🎮</span>Jogo do Renan</a>
     <a class="so-desktop" href="#/dados"><span aria-hidden="true">💾</span>Dados</a>
+    <a class="so-celular" href="#/jogo" aria-label="Jogo do Renan"><span aria-hidden="true">🎮</span>Jogo</a>
     <a class="so-celular" href="#/mais"><span aria-hidden="true">☰</span>Mais</a>
   </nav>
   <main id="conteudo" tabindex="-1"><p class="carregando">Carregando…</p></main>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=menu-jogo-1"></script>
 </body>
 </html>

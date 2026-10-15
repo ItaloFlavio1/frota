@@ -9,7 +9,7 @@ const PASSOS = [
   { titulo: 'Bem-vindo ao Controle de Frota da Cabral! 🚚',
     texto: 'Este tutorial mostra, em poucos passos, o que cada parte do sistema faz e como cadastrar as coisas. Leva uns 2 minutos. Você pode pular e rever depois em <strong>Dados → Ver tutorial</strong>.' },
   { alvo: ['.menu'], rota: 'resumo', titulo: 'Menu',
-    texto: 'Aqui você troca de tela. No celular, o menu fica embaixo; <strong>Mais</strong> guarda Boletos, Caminhões, Clientes, Manutenção e Dados.' },
+    texto: 'Aqui você troca de tela. No celular, o menu fica embaixo, com acesso direto ao <strong>Jogo do Renan</strong>; <strong>Mais</strong> guarda Painel, Boletos, Caminhões, Clientes, Manutenção e Dados.' },
   { alvo: ['.topo .btn.novo'], rota: 'resumo', titulo: '+ Novo lançamento',
     texto: 'O jeito mais rápido de cadastrar qualquer coisa: escolha o <strong>caminhão</strong> e o <strong>tipo</strong> (viagem/frete, despesa, abastecimento, recebimento, boleto ou manutenção) e preencha. O modelo e a placa aparecem sempre no topo do formulário, para evitar lançar no caminhão errado.' },
   { alvo: ['.grade-cartoes', '#conteudo'], rota: 'resumo', titulo: 'Resumo',

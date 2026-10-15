@@ -557,7 +557,7 @@ function telaBoletos() {
 }
 
 function telaMais() {
-  const itens = [['boletos', '📄', 'Boletos'], ['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['jogo', '🎮', 'Jogo do Renan'], ['dados', '💾', 'Dados, backup e conta']];
+  const itens = [['painel', '📈', 'Painel'], ['boletos', '📄', 'Boletos'], ['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['jogo', '🎮', 'Jogo do Renan'], ['dados', '💾', 'Dados, backup e conta']];
   return `<h1>Mais</h1><ul class="lista">${itens.map(([h, i, t]) =>
     `<li class="item"><a class="principal" href="#/${h}"><strong><span aria-hidden="true">${i}</span> ${t}</strong></a></li>`).join('')}</ul>`;
 }
@@ -751,7 +751,7 @@ async function render() {
   desmontarJogo();
   const [, rota = 'resumo', ...resto] = (location.hash || '#/resumo').split('/');
   const id = resto.join('/');
-  const noMais = ['boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados', 'jogo'].includes(rota);
+  const noMais = ['painel', 'boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
   document.querySelectorAll('.menu a').forEach(a => {
     const href = a.getAttribute('href');
     a.toggleAttribute('aria-current', href === '#/' + rota || (href === '#/mais' && noMais));
