@@ -64,6 +64,10 @@ const rota = x => `${esc(x.origem || '?')} → ${esc(x.destino || '?')}`;
 const sinal = c => `<span class="${c < 0 ? 'neg' : ''}">${moedaC(c)}</span>`;
 const por = x => S.autor(x) ? ` · por ${esc(S.autor(x))}` : '';
 const nomeCliente = x => esc(clienteDe(D, x) || 'Sem cliente');
+const FORMA_PAGAMENTO = { pix: 'PIX', debito: 'Cartão de débito', credito_parcelado: 'Cartão de crédito parcelado' };
+const detalhePagamento = x => x.forma_pagamento
+  ? ` · ${FORMA_PAGAMENTO[x.forma_pagamento] || esc(x.forma_pagamento)}${x.parcelas_cartao ? ` (${x.parcelas_cartao}x)` : ''}`
+  : '';
 
 // ---------------------------------------------------------------------------
 // Resumo
@@ -148,12 +152,38 @@ function alertasRecebimento(caminhoes) {
   </section>`;
 }
 
+function listaAnotacoes() {
+  const anotacoes = [...D.anotacoes]
+    .sort((a, b) => Number(a.concluida) - Number(b.concluida)
+      || (a.data_limite || '9999-12-31').localeCompare(b.data_limite || '9999-12-31')
+      || (a.created_at || '').localeCompare(b.created_at || ''));
+  if (!anotacoes.length) return '<p class="nota">Nenhuma anotação ainda.</p>';
+  return `<ul class="grade-cartoes anotacoes-grade">${anotacoes.map(a => `<li class="cartao anotacao-item ${a.concluida ? 'concluida' : ''}">
+    <div><span class="selo ${a.concluida ? 'ok' : ''}">${a.concluida ? 'Concluída' : 'Em aberto'}</span></div>
+    <p class="texto-anotacao">${esc(a.texto)}</p>
+    <p class="prazo-anotacao">${a.data_limite ? `Prazo: ${dataBR(a.data_limite)}` : 'Sem prazo definido'}</p>
+    <div class="acoes">
+      <button class="btn mini sec" data-acao="editar-anotacao" data-id="${a.id}">Editar</button>
+      <button class="btn mini" data-acao="alternar-anotacao" data-id="${a.id}">${a.concluida ? 'Reabrir' : 'Concluir'}</button>
+      <button class="btn mini perigo" data-acao="apagar-anotacao" data-id="${a.id}">Apagar</button>
+    </div>
+  </li>`).join('')}</ul>`;
+}
+
+function painelAnotacoes() {
+  return `<section class="painel-anotacoes" aria-label="Anotações gerais">
+    <div class="titulo"><h2>Anotações e tarefas</h2><button class="btn mini" data-acao="nova-anotacao">+ Nova anotação</button></div>
+    ${listaAnotacoes()}
+  </section>`;
+}
+
 function telaResumo() {
   const per = intervalo();
   const caminhoes = D.caminhoes.filter(c => filtro.caminhao ? c.id === filtro.caminhao : (c.ativo || S.temHistorico(c.id)));
   if (!D.caminhoes.length) {
     return `<h1>Resumo</h1>${vazio('Nenhum caminhão cadastrado ainda.')}
-      <p><button class="btn" data-acao="novo-caminhao">Cadastrar primeiro caminhão</button></p>`;
+      <p><button class="btn" data-acao="novo-caminhao">Cadastrar primeiro caminhão</button></p>
+      ${painelAnotacoes()}`;
   }
   const resumos = caminhoes.map(c => ({ c, r: resumoCaminhao(D, c.id, per[0], per[1]) }));
   const total = somarResumos(resumos.map(x => x.r));
@@ -175,7 +205,8 @@ function telaResumo() {
       }).join('')}
       ${resumos.length > 1 ? `<section class="cartao total"><header><h2>Total da frota</h2></header>${cartaoNumeros(total)}
         <p class="rodape">Soma dos ${resumos.length} caminhões acima, com os mesmos filtros.</p></section>` : ''}
-    </div>`;
+    </div>
+    ${painelAnotacoes()}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +336,7 @@ function telaViagem(id) {
               · cliente ${linkCliente(clienteDe(D, f))}${f.vencimento ? ` · vence ${dataBR(f.vencimento)}` : ''}${por(f)}</small></div>
           <div class="valor"><span>${moeda(f.valor_bruto)}</span><small>recebido ${moedaC(rec)} ${iconeAjuda('recebido')} · a receber ${moedaC(falta)} ${iconeAjuda('a_receber')}</small></div>
         </div>
-        ${recs.length ? `<ul class="sublista">${recs.map(x => `<li>💰 ${dataBR(x.data)} · ${moeda(x.valor)}${x.observacao ? ' · ' + esc(x.observacao) : ''}${por(x)}
+        ${recs.length ? `<ul class="sublista">${recs.map(x => `<li>💰 ${dataBR(x.data)} · ${moeda(x.valor)}${detalhePagamento(x)}${x.observacao ? ' · ' + esc(x.observacao) : ''}${por(x)}
           <button class="link" data-acao="editar-recebimento" data-id="${x.id}">editar</button>
           <button class="link perigo" data-acao="apagar-recebimento" data-id="${x.id}">apagar</button></li>`).join('')}</ul>` : ''}
         <div class="acoes">
@@ -331,7 +362,7 @@ function listaDespesas(lista) {
     return `<li class="item">
       <div class="principal"><strong>${nomeCategoria(x.categoria)}</strong> <span class="placa">${placa(x.caminhao_id)}</span>
         <small>${dataBR(x.data_gasto)}${x.descricao ? ' · ' + esc(x.descricao) : ''}${vg ? ` · viagem <a href="#/viagens/${vg.id}">${rota(vg)}</a>` : ''}${origem ? ` · gerada por ${origem}` : ''}${por(x)}</small></div>
-      <div class="valor"><span>${moeda(x.valor)}</span><small>${x.pago ? 'pago em ' + dataBR(x.data_pagamento) : `<span class="pendente">${x.vencimento ? 'vence ' + dataBR(x.vencimento) : 'pendente'}</span>`}${x.total_parcelas > 1 ? ` · ${x.parcela}/${x.total_parcelas}` : ''}</small></div>
+      <div class="valor"><span>${moeda(x.valor)}</span><small>${x.pago ? 'pago em ' + dataBR(x.data_pagamento) + detalhePagamento(x) : `<span class="pendente">${x.vencimento ? 'vence ' + dataBR(x.vencimento) : 'pendente'}</span>`}${x.total_parcelas > 1 ? ` · ${x.parcela}/${x.total_parcelas}` : ''}</small></div>
       ${origem ? '' : `<div class="acoes"><button class="btn mini sec" data-acao="editar-despesa" data-id="${x.id}">Editar</button>
         <button class="btn mini perigo" data-acao="apagar-despesa" data-id="${x.id}">Apagar</button></div>`}
     </li>`;
@@ -366,7 +397,7 @@ function telaLancamentos(aba = 'despesas') {
         : `<span class="selo">Avulso</span> ${clienteDe(D, r) ? nomeCliente(r) : 'sem frete lançado'}`;
       return `<li class="item">
         <div class="principal"><strong>${f ? rota(f) : esc(r.descricao || 'Recebimento avulso')}</strong> <span class="placa">${placa(caminhaoDoRecebimento(D, r))}</span>
-          <small>recebido em ${dataBR(r.data)} · ${detalhe}${r.observacao ? ' · ' + esc(r.observacao) : ''}${por(r)}${f ? ` · <a href="#/viagens/${f.viagem_id}">ver viagem</a>` : ''}</small></div>
+          <small>recebido em ${dataBR(r.data)} · ${detalhe}${detalhePagamento(r)}${r.observacao ? ' · ' + esc(r.observacao) : ''}${por(r)}${f ? ` · <a href="#/viagens/${f.viagem_id}">ver viagem</a>` : ''}</small></div>
         <div class="valor"><span>${moeda(r.valor)}</span></div>
         <div class="acoes"><button class="btn mini sec" data-acao="editar-recebimento" data-id="${r.id}">Editar</button>
           <button class="btn mini perigo" data-acao="apagar-recebimento" data-id="${r.id}">Apagar</button></div>
@@ -589,6 +620,17 @@ const ACOES = {
   'novo-lancamento': id => F.novoLancamento(id || filtro.caminhao || null),
   'novo-caminhao': () => F.formCaminhao(),
   'editar-caminhao': id => F.formCaminhao(S.caminhao(id)),
+  'nova-anotacao': () => F.formAnotacao(),
+  'editar-anotacao': id => {
+    const anotacao = D.anotacoes.find(a => a.id === id);
+    F.formAnotacao(anotacao);
+  },
+  'alternar-anotacao': async id => {
+    const anotacao = D.anotacoes.find(a => a.id === id);
+    await S.salvarAnotacao(id, { concluida: !anotacao.concluida });
+    render();
+  },
+  'apagar-anotacao': id => apagarCom('Apagar esta anotação?', () => S.apagarAnotacao(id)),
   'corrigir-hodometro': id => F.formHodometro(S.caminhao(id)),
   'inativar-caminhao': async id => {
     const c = S.caminhao(id);

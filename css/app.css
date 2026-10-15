@@ -136,6 +136,15 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; outline: none; }
 .grade-cartoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; }
 .grade-cartoes .cartao { margin: 0; }
 .rodape { font-size: .85rem; color: var(--suave); margin: 10px 0 0; }
+.painel-anotacoes { margin-top: 14px; }
+.painel-anotacoes .titulo { margin-bottom: 10px; }
+.painel-anotacoes .titulo h2 { margin: 0; }
+.anotacoes-grade { list-style: none; padding: 0; margin: 0; }
+.anotacao-item { display: flex; flex-direction: column; gap: 10px; }
+.anotacao-item .texto-anotacao { margin: 0; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+.anotacao-item .prazo-anotacao { margin: 0; color: var(--suave); font-size: .85rem; }
+.anotacao-item.concluida .texto-anotacao { color: var(--suave); text-decoration: line-through; }
+.anotacao-item .acoes { margin-top: auto; }
 .numeros { margin: 0; }
 .numeros > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--borda); }
 .numeros > div:last-child { border-bottom: 0; }

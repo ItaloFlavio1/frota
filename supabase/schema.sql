@@ -23,6 +23,24 @@ create table if not exists caminhoes (
 );
 
 -- ---------------------------------------------------------------------
+-- Anotações e tarefas gerais do Resumo
+-- ---------------------------------------------------------------------
+create table if not exists anotacoes (
+  id           uuid primary key default gen_random_uuid(),
+  owner_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  caminhao_id  uuid references caminhoes(id) on delete cascade,
+  texto        text not null,
+  data_limite  date,
+  concluida    boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+
+-- Instalações anteriores vinculavam anotações a caminhões. Preserve os textos
+-- e prazos, mas remova o vínculo para exibi-las juntas no Resumo.
+alter table anotacoes alter column caminhao_id drop not null;
+update anotacoes set caminhao_id = null where caminhao_id is not null;
+
+-- ---------------------------------------------------------------------
 -- Clientes (contratantes dos fretes)
 -- ---------------------------------------------------------------------
 create table if not exists clientes (
@@ -89,6 +107,8 @@ create table if not exists recebimentos (
   frete_id    uuid not null references fretes(id) on delete cascade,
   data        date not null,
   valor       numeric(12,2) not null check (valor > 0),
+  forma_pagamento text check (forma_pagamento is null or forma_pagamento in ('pix','debito','credito_parcelado')),
+  parcelas_cartao int check (parcelas_cartao is null or parcelas_cartao between 2 and 120),
   observacao  text,
   created_at  timestamptz not null default now()
 );
@@ -160,6 +180,8 @@ create table if not exists despesas (
   data_gasto       date not null,
   pago             boolean not null default false,
   data_pagamento   date,
+  forma_pagamento  text check (forma_pagamento is null or forma_pagamento in ('pix','debito','credito_parcelado')),
+  parcelas_cartao  int check (parcelas_cartao is null or parcelas_cartao between 2 and 120),
   abastecimento_id uuid unique references abastecimentos(id) on delete cascade,
   manutencao_id    uuid unique references manutencoes(id) on delete cascade,
   created_at       timestamptz not null default now(),
@@ -167,6 +189,16 @@ create table if not exists despesas (
   check (abastecimento_id is null or manutencao_id is null),
   check (abastecimento_id is null or viagem_id is null)
 );
+
+-- Campos também são adicionados a instalações existentes ao reexecutar o esquema.
+alter table recebimentos add column if not exists forma_pagamento text
+  check (forma_pagamento is null or forma_pagamento in ('pix','debito','credito_parcelado'));
+alter table recebimentos add column if not exists parcelas_cartao int
+  check (parcelas_cartao is null or parcelas_cartao between 2 and 120);
+alter table despesas add column if not exists forma_pagamento text
+  check (forma_pagamento is null or forma_pagamento in ('pix','debito','credito_parcelado'));
+alter table despesas add column if not exists parcelas_cartao int
+  check (parcelas_cartao is null or parcelas_cartao between 2 and 120);
 
 -- ---------------------------------------------------------------------
 -- Histórico de alterações financeiras
@@ -200,7 +232,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['fretes','recebimentos','despesas','abastecimentos','manutencoes','clientes'] loop
+  foreach t in array array['fretes','recebimentos','despesas','abastecimentos','manutencoes','clientes','anotacoes'] loop
     execute format('drop trigger if exists trg_auditoria on %I', t);
     execute format('create trigger trg_auditoria after insert or update or delete on %I
                     for each row execute function registrar_auditoria()', t);
@@ -236,7 +268,7 @@ create trigger trg_checar_recebimento before insert or update on recebimentos
 do $$
 declare t text;
 begin
-  foreach t in array array['caminhoes','viagens','fretes','recebimentos','abastecimentos',
+  foreach t in array array['caminhoes','anotacoes','viagens','fretes','recebimentos','abastecimentos',
                            'planos_manutencao','manutencoes','despesas','clientes'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists dono on %I', t);
@@ -288,7 +320,7 @@ create index if not exists idx_fretes_cliente on fretes(cliente_id);
 do $$
 declare t text;
 begin
-  foreach t in array array['caminhoes','viagens','fretes','recebimentos','abastecimentos',
+  foreach t in array array['caminhoes','anotacoes','viagens','fretes','recebimentos','abastecimentos',
                            'planos_manutencao','manutencoes','despesas','clientes'] loop
     execute format('alter table %I add column if not exists criado_por text
                     default (auth.jwt() ->> ''email'')', t);

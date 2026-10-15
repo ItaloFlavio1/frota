@@ -47,6 +47,16 @@ export async function salvarCaminhao(id, dados) {
   await recarregar();
 }
 
+export async function salvarAnotacao(id, dados) {
+  await salvar('anotacoes', id, dados);
+  await recarregar();
+}
+
+export async function apagarAnotacao(id) {
+  await db.remover('anotacoes', id);
+  await recarregar();
+}
+
 export async function salvarCliente(id, dados) {
   await salvar('clientes', id, dados);
   await recarregar();

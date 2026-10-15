@@ -1,7 +1,7 @@
 // Camada de dados: mesma interface para Supabase (produção) e localStorage (demonstração).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-export const TABELAS = ['caminhoes', 'clientes', 'viagens', 'fretes', 'recebimentos', 'abastecimentos',
+export const TABELAS = ['caminhoes', 'anotacoes', 'clientes', 'viagens', 'fretes', 'recebimentos', 'abastecimentos',
   'planos_manutencao', 'manutencoes', 'despesas'];
 
 function uuid() {

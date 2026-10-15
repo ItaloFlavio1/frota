@@ -69,27 +69,63 @@ function ligarFaixa(form, aoTrocar) {
   atualizar();
 }
 
-const pagamentoCampos = (pago, dataPag, padraoPago) => `
+const pagamentoCampos = (pago, dataPag, padraoPago, forma = '', parcelas = 2) => `
   <fieldset class="grupo"><legend>Pagamento ${iconeAjuda('datas_despesa')}</legend>
     ${caixa({ nome: 'pago', rotulo: 'Já foi pago', marcado: pago ?? padraoPago })}
-    ${campo({ nome: 'data_pagamento', rotulo: 'Data do pagamento', tipo: 'date', valor: dataPag })}
+    <div data-dados-pagamento>
+      ${campo({ nome: 'data_pagamento', rotulo: 'Data do pagamento', tipo: 'date', valor: dataPag })}
+      ${camposFormaPagamento(forma, parcelas)}
+    </div>
   </fieldset>`;
 
+const FORMAS_PAGAMENTO = [
+  ['pix', 'PIX'], ['debito', 'Cartão de débito'], ['credito_parcelado', 'Cartão de crédito parcelado'],
+];
+
+function camposFormaPagamento(forma = '', parcelas = 2) {
+  return `${selecao({ nome: 'forma_pagamento', rotulo: 'Forma de pagamento', opcoes: FORMAS_PAGAMENTO, valor: forma, vazio: 'Selecione…' })}
+    <div data-parcelas-cartao ${forma === 'credito_parcelado' ? '' : 'hidden'}>
+      ${campo({ nome: 'parcelas_cartao', rotulo: 'Número de parcelas', tipo: 'numero', valor: parcelas,
+        attrs: 'min="2" max="120" step="1"' })}
+    </div>`;
+}
+
+function ligarFormaPagamento(form) {
+  const forma = form.querySelector('[name=forma_pagamento]');
+  const parcelas = form.querySelector('[data-parcelas-cartao]');
+  const atualizar = () => { parcelas.hidden = forma.value !== 'credito_parcelado'; };
+  forma.addEventListener('change', atualizar);
+  atualizar();
+}
+
+function lerFormaPagamento(v) {
+  exigir(FORMAS_PAGAMENTO.some(([id]) => id === v.forma_pagamento), 'Escolha a forma de pagamento.');
+  if (v.forma_pagamento !== 'credito_parcelado') {
+    return { forma_pagamento: v.forma_pagamento, parcelas_cartao: null };
+  }
+  const parcelas = numeroCampo(v.parcelas_cartao, 'o número de parcelas', { obrigatorio: true, positivo: true });
+  exigir(Number.isInteger(parcelas) && parcelas >= 2 && parcelas <= 120,
+    'O número de parcelas deve ser um inteiro entre 2 e 120.');
+  return { forma_pagamento: v.forma_pagamento, parcelas_cartao: parcelas };
+}
+
 function lerPagamento(v, dataGasto) {
-  if (!v.pago) return { pago: false, data_pagamento: null };
-  return { pago: true, data_pagamento: v.data_pagamento || dataGasto };
+  if (!v.pago) return { pago: false, data_pagamento: null, forma_pagamento: null, parcelas_cartao: null };
+  return { pago: true, data_pagamento: v.data_pagamento || dataGasto, ...lerFormaPagamento(v) };
 }
 
 function ligarPagamento(form, campoData) {
   const pago = form.querySelector('[name=pago]');
-  const dataPag = form.querySelector('[data-campo=data_pagamento]');
+  const dadosPagamento = form.querySelector('[data-dados-pagamento]');
+  const dataPag = dadosPagamento.querySelector('[data-campo=data_pagamento]');
   const atualizar = () => {
-    dataPag.hidden = !pago.checked;
+    dadosPagamento.hidden = !pago.checked;
     const inp = dataPag.querySelector('input');
     if (pago.checked && !inp.value) inp.value = form.querySelector(`[name=${campoData}]`).value;
   };
   pago.addEventListener('change', atualizar);
   atualizar();
+  ligarFormaPagamento(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +156,23 @@ export function formCaminhao(c = null) {
       dados.ativo = c ? v.ativo : true;
       await S.salvarCaminhao(c?.id, dados);
       concluir('Caminhão salvo.');
+    },
+  });
+}
+
+export function formAnotacao(anotacao = null) {
+  abrirFormulario({
+    titulo: anotacao ? 'Editar anotação' : 'Nova anotação',
+    html: `${campo({ nome: 'texto', rotulo: 'O que precisa ser feito?', tipo: 'textarea',
+      valor: anotacao?.texto, obrigatorio: true, attrs: 'maxlength="500" placeholder="Ex.: Comprar um pneu novo"' })}
+      ${campo({ nome: 'data_limite', rotulo: 'Prazo (opcional)', tipo: 'date', valor: anotacao?.data_limite })}`,
+    async aoSalvar(form) {
+      const v = valoresDe(form);
+      exigir(v.texto, 'Descreva o que precisa ser feito.');
+      await S.salvarAnotacao(anotacao?.id, {
+        caminhao_id: null, texto: v.texto, data_limite: v.data_limite || null,
+      });
+      concluir(anotacao ? 'Anotação atualizada.' : 'Anotação adicionada ao Resumo.');
     },
   });
 }
@@ -362,8 +415,10 @@ export function formRecebimento({ r = null, freteId = null, caminhaoId = null, a
       </div>
       ${campo({ nome: 'valor', rotulo: 'Valor recebido (R$)', tipo: 'numero', valor: paraCampo(r?.valor), ajuda: 'recebido', obrigatorio: true })}
       ${campo({ nome: 'data', rotulo: 'Data do recebimento', tipo: 'date', valor: r?.data || hojeISO(), ajuda: 'data_recebimento', obrigatorio: true })}
+      ${camposFormaPagamento(r?.forma_pagamento, r?.parcelas_cartao)}
       ${campo({ nome: 'observacao', rotulo: 'Observação', valor: r?.observacao })}`,
     aoMontar(form) {
+      ligarFormaPagamento(form);
       const tipo = () => form.querySelector('[name=tipo]:checked')?.value || form.querySelector('[name=tipo]').value;
       const mostrar = () => form.querySelectorAll('[data-tipo]').forEach(el => { el.hidden = el.dataset.tipo !== tipo(); });
       const saldo = () => {
@@ -404,9 +459,10 @@ export function formRecebimento({ r = null, freteId = null, caminhaoId = null, a
       }
       const valor = numeroCampo(v.valor, 'o valor', { obrigatorio: true, positivo: true });
       exigir(v.data, 'Preencha a data do recebimento.');
+      const formaPagamento = lerFormaPagamento(v);
       if (v.tipo === 'avulso') {
         await S.salvarRecebimento(r?.id, { frete_id: null, caminhao_id: v.caminhao_id, cliente_id: null, cliente_nome: v.cliente_nome || null,
-          descricao: v.descricao, valor, data: v.data, observacao: v.observacao || null });
+          descricao: v.descricao, valor, data: v.data, observacao: v.observacao || null, ...formaPagamento });
         concluir('Recebimento avulso salvo.');
         return;
       }
@@ -415,7 +471,7 @@ export function formRecebimento({ r = null, freteId = null, caminhaoId = null, a
       const falta = centavos(f.valor_bruto) - recebidoDoFrete(D, f.id, r?.id);
       exigir(centavos(valor) <= falta, `O valor ultrapassa o que falta receber deste frete (${moedaC(falta)}).`);
       await S.salvarRecebimento(r?.id, { frete_id: f.id, caminhao_id: null, cliente_id: null, cliente_nome: null, descricao: null,
-        valor, data: v.data, observacao: v.observacao || null });
+        valor, data: v.data, observacao: v.observacao || null, ...formaPagamento });
       concluir('Recebimento salvo.');
     },
   });
@@ -462,7 +518,7 @@ export function formDespesa({ x = null, caminhaoId = null, viagemId = null, bole
         ${campo({ nome: 'valor', rotulo: 'Valor (R$)', tipo: 'numero', valor: paraCampo(x?.valor), obrigatorio: true })}
         <div data-campo-gasto>${campo({ nome: 'data_gasto', rotulo: 'Data do gasto', tipo: 'date', valor: x?.data_gasto || hojeISO(), ajuda: 'datas_despesa', obrigatorio: true })}</div>
       </div>
-      ${pagamentoCampos(x?.pago, x?.data_pagamento, !ehBoleto)}`,
+      ${pagamentoCampos(x?.pago, x?.data_pagamento, !ehBoleto, x?.forma_pagamento, x?.parcelas_cartao)}`,
     aoMontar(form) {
       ligarFaixa(form, id => {
         form.querySelector('[data-viagens]').innerHTML = id
@@ -551,13 +607,15 @@ export function formPagarBoleto(x) {
     html: `<p><strong>${esc(x.fornecedor || nomeCategoria(x.categoria))}</strong>${x.total_parcelas > 1 ? ` · parcela ${x.parcela}/${x.total_parcelas}` : ''}<br>
         <small>vence ${dataBRc(x.vencimento)} · ${moedaC(centavos(x.valor))}</small></p>
       ${campo({ nome: 'data_pagamento', rotulo: 'Data do pagamento', tipo: 'date', valor: hojeISO(), obrigatorio: true })}
+      ${camposFormaPagamento(x.forma_pagamento, x.parcelas_cartao)}
       ${campo({ nome: 'valor', rotulo: 'Valor pago (R$)', tipo: 'numero', valor: paraCampo(x.valor), obrigatorio: true, dica: 'Ajuste se pagou com juros ou desconto.' })}`,
+    aoMontar(form) { ligarFormaPagamento(form); },
     textoSalvar: 'Confirmar pagamento',
     async aoSalvar(form) {
       const v = valoresDe(form);
       exigir(v.data_pagamento, 'Preencha a data do pagamento.');
       const valor = numeroCampo(v.valor, 'o valor', { obrigatorio: true, minimo: 0 });
-      await S.salvarDespesa(x.id, { pago: true, data_pagamento: v.data_pagamento, valor });
+      await S.salvarDespesa(x.id, { pago: true, data_pagamento: v.data_pagamento, valor, ...lerFormaPagamento(v) });
       concluir('Pagamento registrado.');
     },
   });
@@ -585,7 +643,7 @@ export function formAbastecimento({ a = null, caminhaoId = null } = {}) {
       ${campo({ nome: 'total', rotulo: 'Total pago (R$)', tipo: 'numero', valor: paraCampo(a?.total), obrigatorio: true, dica: 'Calculado automaticamente; ajuste se o cupom tiver outro valor.' })}
       ${campo({ nome: 'posto', rotulo: 'Posto (opcional)', valor: a?.posto })}
       ${caixa({ nome: 'tanque_cheio', rotulo: 'Tanque completo', marcado: a?.tanque_cheio, ajuda: 'tanque_cheio' })}
-      ${pagamentoCampos(desp?.pago, desp?.data_pagamento, true)}`,
+      ${pagamentoCampos(desp?.pago, desp?.data_pagamento, true, desp?.forma_pagamento, desp?.parcelas_cartao)}`,
     aoMontar(form) {
       ligarFaixa(form);
       ligarPagamento(form, 'data');
@@ -697,7 +755,7 @@ export function formManutencao({ m = null, caminhaoId = null, planoId = null } =
         </div>
         <p class="calculo" data-proximo aria-live="polite"></p>
       </fieldset>` : ''}
-      ${pagamentoCampos(desp?.pago, desp?.data_pagamento, true)}`,
+      ${pagamentoCampos(desp?.pago, desp?.data_pagamento, true, desp?.forma_pagamento, desp?.parcelas_cartao)}`,
     aoMontar(form) {
       if (plano) form.closest('dialog').querySelector('.faixa-caminhao').innerHTML = faixa(cId);
       else ligarFaixa(form);
