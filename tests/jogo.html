@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Testes do Jogo do Renan</title></head>
+<body><pre id="saida">Rodando…</pre>
+<script type="module">
+import { criarPartida, moverCaminhao, atualizarPartida, normalizarNome, ordenarRanking } from '../js/jogo.js';
+const linhas = [];
+let falhas = 0;
+function ok(nome, condicao) {
+  linhas.push(`${condicao ? 'OK' : 'FALHOU'}: ${nome}`);
+  if (!condicao) falhas++;
+}
+function partida() { const j = criarPartida(); j.estado = 'jogando'; return j; }
+function carro(x, y) { return { x, y, largura: 24, altura: 36, modelo: 0, cor: '#fff' }; }
+
+const parado = criarPartida();
+moverCaminhao(parado, -1); atualizarPartida(parado, 1);
+ok('Tela inicial aguarda o jogador iniciar', parado.faixa === 1 && parado.tempo === 0 && !parado.carros.length);
+const borda = partida();
+for (let i = 0; i < 6; i++) moverCaminhao(borda, -1);
+ok('Caminhão não sai pelo lado esquerdo', borda.faixa === 0);
+for (let i = 0; i < 6; i++) moverCaminhao(borda, 1);
+ok('Caminhão não sai pelo lado direito', borda.faixa === 2);
+
+const batida = partida(); batida.carros = [carro(144, 330)];
+atualizarPartida(batida, .016);
+ok('Colisão na mesma faixa encerra a partida', batida.estado === 'fim');
+const fim = JSON.stringify(batida);
+atualizarPartida(batida, .05); moverCaminhao(batida, -1);
+ok('Fim de jogo interrompe movimento e pontuação', JSON.stringify(batida) === fim);
+
+const desvio = partida(); desvio.carros = [carro(80, 330)];
+atualizarPartida(desvio, .016);
+ok('Carro na faixa vizinha não causa colisão', desvio.estado === 'jogando');
+const troca = partida(); troca.carros = [carro(144, 330)]; moverCaminhao(troca, -1);
+atualizarPartida(troca, .001);
+ok('A colisão usa a posição real durante a troca de faixa', troca.estado === 'fim');
+
+const pausa = partida(); pausa.carros = [carro(80, 40)]; pausa.estado = 'pausado';
+const antes = JSON.stringify(pausa);
+atualizarPartida(pausa, .05); moverCaminhao(pausa, 1);
+ok('Pausa congela carros, relógio e direção', JSON.stringify(pausa) === antes);
+pausa.estado = 'jogando'; atualizarPartida(pausa, .05);
+ok('Retomar continua a mesma partida', pausa.tempo > 0 && pausa.carros[0].y > 40);
+
+const pontos = partida(); pontos.carros = [carro(80, 415)];
+atualizarPartida(pontos, .05);
+ok('Ultrapassagem concede 25 pontos extras', pontos.ultrapassados === 1 && pontos.pontos === 25);
+atualizarPartida(pontos, .05);
+ok('Mesmo carro não pontua duas vezes', pontos.ultrapassados === 1 && pontos.carros.length === 0);
+
+const longa = partida();
+for (let i = 0; i < 600; i++) atualizarPartida(longa, .05, () => 0);
+ok('Trânsito aparece e acelera forte nos primeiros 30 segundos', longa.estado === 'jogando' && longa.velocidade > 400 && longa.ultrapassados > 10);
+const velocidadeAos30 = longa.velocidade;
+for (let i = 0; i < 1000; i++) atualizarPartida(longa, .05, () => 0);
+ok('Velocidade continua aumentando até o limite', longa.estado === 'jogando' && longa.velocidade > velocidadeAos30 && longa.velocidade === 600);
+longa.proximoCarro = 0;
+atualizarPartida(longa, .016, () => 0);
+ok('Trânsito avançado chega com intervalo menor e limitado', longa.proximoCarro === .5);
+const atraso = partida(); atualizarPartida(atraso, 30);
+ok('Quadro atrasado não teletransporta o trânsito', atraso.tempo <= .05 && atraso.distancia < 10);
+
+ok('Nome vazio não é aceito e espaços são normalizados', normalizarNome('   ') === '' && normalizarNome('  João   Silva ') === 'João Silva');
+ok('Nome respeita limite de tamanho', normalizarNome('a'.repeat(40)).length === 24);
+ok('Ranking inválido não quebra o jogo', ordenarRanking({}).length === 0 && ordenarRanking([null, {nome:' ',pontos:5}, {nome:'X',pontos:-1}, {nome:'X',pontos:'10'}]).length === 0);
+const viagens = Array.from({length:12}, (_, i) => ({nome:`Piloto ${i}`,pontos:i*10}));
+const top = ordenarRanking(viagens);
+ok('Ranking guarda as dez maiores pontuações sem alterar a origem', top.length === 10 && top[0].pontos === 110 && top[9].pontos === 20 && viagens[0].pontos === 0);
+const empate = ordenarRanking([{nome:'Ana',pontos:100},{nome:'Bia',pontos:100}]);
+ok('Empate preserva ordem de chegada', empate[0].nome === 'Ana' && empate[1].nome === 'Bia');
+ok('Ranking continua válido após salvar e carregar', JSON.stringify(ordenarRanking(JSON.parse(JSON.stringify(top)))) === JSON.stringify(top));
+const rural = partida(); rural.proximoCarro = 0;
+const sorteios = [.99, .5, 0];
+atualizarPartida(rural, .016, () => sorteios.shift());
+ok('Carroça aparece com cavalo e tamanho próprio', rural.carros[0].modelo === 3 && rural.carros[0].altura === 64 && rural.carros[0].largura === 28);
+rural.carros[0].y = 280;
+atualizarPartida(rural, .016);
+ok('Colisão considera o comprimento da carroça', rural.estado === 'fim');
+document.getElementById('saida').textContent = linhas.join('\n') + `\n\n${falhas} falha(s).`;
+if (falhas) throw new Error(`${falhas} teste(s) falharam.`);
+</script></body></html>

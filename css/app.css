@@ -145,6 +145,50 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; outline: none; }
 .anotacao-item .prazo-anotacao { margin: 0; color: var(--suave); font-size: .85rem; }
 .anotacao-item.concluida .texto-anotacao { color: var(--suave); text-decoration: line-through; }
 .anotacao-item .acoes { margin-top: auto; }
+
+/* Arcade do Renan */
+.jogo-renan { max-width: 720px; margin: 0 auto; }
+.jogo-chamada { margin: 0 0 5px; font: 700 .7rem/1.5 ui-monospace, monospace; letter-spacing: .08em; }
+.jogo-selo { color: var(--suave); font: 700 .7rem ui-monospace, monospace; }
+.jogo-intro { margin: 0 0 16px; color: var(--suave); }
+.jogo-arcade { background: #102c2c; color: #f8edca; border: 4px solid #234940; border-radius: 12px; padding: 14px; box-shadow: 0 5px 0 #081c1c; }
+.jogo-jogador { max-width: 360px; margin: 0 auto 16px; }
+.jogo-jogador label { display: block; margin-bottom: 6px; font-weight: 700; }
+.jogo-jogador input { width: 100%; background: #081c1c; color: #fff1b4; border: 1px solid #527262; }
+.jogo-jogador input::placeholder { color: #b4c4b9; }
+.jogo-jogador input:disabled { opacity: .75; }
+.jogo-jogador small { display: block; margin-top: 6px; color: #c4d2ba; }
+.jogo-ranking { margin-top: 20px; padding-top: 16px; border-top: 1px solid #527262; }
+.jogo-ranking h2 { margin: 0; font: 800 1.1rem ui-monospace, monospace; color: #f5d44d; }
+.jogo-ranking p, .jogo-ranking small { color: #c4d2ba; font-size: .8rem; }
+.jogo-ranking ol { padding-left: 28px; }
+.jogo-ranking li { padding: 9px 6px; border-bottom: 1px solid #234940; }
+.jogo-ranking li::marker { color: #f5d44d; font-weight: 700; }
+.jogo-ranking li span { display: inline-block; width: 70%; overflow-wrap: anywhere; vertical-align: top; }
+.jogo-ranking li strong { display: inline-block; width: 30%; text-align: right; font-family: ui-monospace, monospace; }
+.jogo-placar { display: flex; justify-content: space-around; gap: 12px; margin: 0 0 12px; text-align: center; font-family: ui-monospace, monospace; }
+.jogo-placar dt { font-size: .75rem; color: #bac8aa; text-transform: uppercase; }
+.jogo-placar dd { margin: 0; color: #f5d44d; font-size: 1.4rem; font-weight: 800; }
+.jogo-pista { position: relative; width: min(100%, 360px, max(240px, calc(58svh * .6923))); margin: auto; border: 3px solid #081c1c; }
+.jogo-pista canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.jogo-overlay { position: absolute; inset: 0; display: grid; align-items: center; padding: 14px; background: #081c1cbf; text-align: center; overflow-y: auto; overflow-wrap: anywhere; }
+.jogo-overlay > div { padding: 16px 10px; background: #102c2cf2; border: 2px solid #f5d44d; box-shadow: 4px 4px 0 #081c1c; }
+.jogo-overlay h2 { margin: 8px 0; color: #fff1b4; font: 800 1.2rem/1.3 ui-monospace, monospace; }
+.jogo-overlay p { font-size: .85rem; }
+.jogo-arcade .btn { background: #f5d44d; color: #142b26; border-color: #f5d44d; }
+.jogo-arcade .btn:hover { background: #ffe785; }
+.jogo-arcade .btn:disabled { cursor: default; }
+.jogo-arcade .btn.sec { background: #234940; color: #fff1b4; border-color: #527262; }
+.jogo-arcade :focus-visible { outline-color: #fff1b4; }
+.jogo-controles { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
+.jogo-controles .btn { min-height: 46px; touch-action: manipulation; user-select: none; }
+.jogo-ajuda { text-align: center; font-size: .78rem; color: #c4d2ba; margin: 0; }
+.jogo-status { min-height: 1.4em; font-size: .8rem; text-align: center; margin: 8px 0 0; }
+@media (max-width: 400px) {
+  .jogo-arcade { padding: 10px; }
+  .jogo-controles { gap: 5px; }
+  .jogo-controles .btn { padding: 7px; font-size: .8rem; }
+}
 .numeros { margin: 0; }
 .numeros > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--borda); }
 .numeros > div:last-child { border-bottom: 0; }

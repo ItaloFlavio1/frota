@@ -14,6 +14,7 @@ import {
 } from './calc.js';
 import { decifrarBackup } from './cripto.js';
 import { iniciarTutorial, deveMostrarTutorial } from './tour.js';
+import { telaJogo, montarJogo, desmontarJogo } from './jogo.js';
 
 const $conteudo = () => document.getElementById('conteudo');
 
@@ -556,7 +557,7 @@ function telaBoletos() {
 }
 
 function telaMais() {
-  const itens = [['boletos', '📄', 'Boletos'], ['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['dados', '💾', 'Dados, backup e conta']];
+  const itens = [['boletos', '📄', 'Boletos'], ['caminhoes', '🚚', 'Caminhões'], ['clientes', '🤝', 'Clientes'], ['manutencoes', '🔧', 'Manutenção'], ['jogo', '🎮', 'Jogo do Renan'], ['dados', '💾', 'Dados, backup e conta']];
   return `<h1>Mais</h1><ul class="lista">${itens.map(([h, i, t]) =>
     `<li class="item"><a class="principal" href="#/${h}"><strong><span aria-hidden="true">${i}</span> ${t}</strong></a></li>`).join('')}</ul>`;
 }
@@ -747,9 +748,10 @@ document.addEventListener('change', async e => {
 // Navegação
 // ---------------------------------------------------------------------------
 async function render() {
+  desmontarJogo();
   const [, rota = 'resumo', ...resto] = (location.hash || '#/resumo').split('/');
   const id = resto.join('/');
-  const noMais = ['boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados'].includes(rota);
+  const noMais = ['boletos', 'caminhoes', 'clientes', 'manutencoes', 'dados', 'jogo'].includes(rota);
   document.querySelectorAll('.menu a').forEach(a => {
     const href = a.getAttribute('href');
     a.toggleAttribute('aria-current', href === '#/' + rota || (href === '#/mais' && noMais));
@@ -766,10 +768,12 @@ async function render() {
     lancamentos: () => telaLancamentos(id),
     manutencoes: telaManutencoes,
     dados: telaDados,
+    jogo: telaJogo,
   };
   const el = $conteudo();
   el.innerHTML = await (telas[rota] || telaResumo)();
   if (rota === 'painel') montarGraficos();
+  if (rota === 'jogo') montarJogo(el);
 }
 
 // Gráficos usam as cores do tema: redesenha ao trocar claro/escuro.
