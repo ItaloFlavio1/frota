@@ -1,8 +1,7 @@
-// Jogo local: não lê nem altera os dados financeiros da frota.
+// O jogo não lê nem altera os dados financeiros da frota.
 const FAIXAS = [80, 144, 208];
 const Y_CAMINHAO = 326;
 const CHAVE_RECORDE = 'frota-jogo-renan-recorde';
-const CHAVE_RANKING = 'frota-jogo-renan-ranking';
 const CHAVE_NOME = 'frota-jogo-renan-nome';
 const CORES = ['#f3d653', '#d44337', '#e9dfc3', '#5d9ed0', '#73ac72'];
 
@@ -88,9 +87,9 @@ export function telaJogo() {
       <p class="jogo-status" data-status role="status" aria-live="polite"></p>
       <section class="jogo-ranking" aria-labelledby="titulo-ranking">
         <h2 id="titulo-ranking">Ranking da estrada</h2>
-        <p>As 10 melhores viagens deste navegador.</p>
+        <p>As 10 melhores viagens de todos os jogadores.</p>
         <ol data-ranking></ol><p data-ranking-vazio>O pódio está livre. Termine uma partida para entrar!</p>
-        <small data-ranking-aviso>Salvo neste navegador, sem sincronização entre aparelhos.</small>
+        <small data-ranking-aviso>Carregando ranking…</small>
       </section>
     </div>
   </section>`;
@@ -201,7 +200,7 @@ function desenhar(ctx, jogo) {
 let limpar = null;
 export function desmontarJogo() { limpar?.(); limpar = null; }
 
-export function montarJogo(container) {
+export function montarJogo(container, armazenamento) {
   desmontarJogo();
   const raiz = container.querySelector('.jogo-renan');
   if (!raiz) return;
@@ -223,11 +222,17 @@ export function montarJogo(container) {
   if (!ctx) { mensagem.textContent = 'Este navegador não conseguiu abrir o jogo. Tente outro navegador.'; jogar.disabled = true; return; }
   let jogo = criarPartida(), recorde = 0, raf = 0, anterior = 0;
   let nomeJogador = '', ranking = [];
-  const avisarArmazenamento = () => { rankingAviso.textContent = 'Não foi possível salvar neste navegador. O ranking ficará disponível só enquanto esta aba do jogo estiver aberta.'; };
+  let versaoRanking = 0;
+  const avisarErroRanking = erro => {
+    rankingAviso.textContent = armazenamento?.modo === 'local'
+      ? 'Não foi possível salvar o ranking neste navegador.'
+      : `Não foi possível sincronizar o ranking compartilhado: ${erro.message}`;
+  };
   try { nomeInput.value = normalizarNome(localStorage.getItem(CHAVE_NOME)); } catch { /* nome opcional */ }
-  try { ranking = ordenarRanking(JSON.parse(localStorage.getItem(CHAVE_RANKING) || '[]')); } catch { /* ranking inválido é ignorado */ }
   try { const salvo = Number(localStorage.getItem(CHAVE_RECORDE)); if (Number.isFinite(salvo) && salvo > 0) recorde = Math.floor(salvo); } catch { /* armazenamento opcional */ }
-  recorde = Math.max(recorde, ranking[0]?.pontos || 0);
+  rankingAviso.textContent = armazenamento?.modo === 'local'
+    ? 'Ranking salvo só neste navegador; não é compartilhado entre usuários.'
+    : 'Ranking compartilhado entre usuários conectados.';
   recordeEl.textContent = String(recorde);
   const exibirRanking = () => {
     rankingEl.replaceChildren();
@@ -240,7 +245,24 @@ export function montarJogo(container) {
       linha.append(nome, placar); rankingEl.append(linha);
     }
   };
-  exibirRanking();
+  const carregarRanking = async () => {
+    const versao = versaoRanking;
+    try {
+      const registros = await armazenamento.listarRanking();
+      if (versao !== versaoRanking) return;
+      ranking = ordenarRanking(registros);
+      recorde = Math.max(recorde, ranking[0]?.pontos || 0);
+      recordeEl.textContent = String(recorde);
+      exibirRanking();
+    } catch (erro) {
+      avisarErroRanking(erro);
+    }
+  };
+  if (armazenamento?.listarRanking) void carregarRanking();
+  else {
+    rankingAviso.textContent = 'Ranking indisponível nesta página.';
+    exibirRanking();
+  }
   const eventos = new AbortController();
   const ouvir = (el, evento, fn) => el.addEventListener(evento, fn, { signal: eventos.signal });
   const exibir = () => {
@@ -260,8 +282,15 @@ export function montarJogo(container) {
     exibir();
     if (jogo.estado === 'fim') {
       ranking = ordenarRanking([...ranking, { nome: nomeJogador, pontos: jogo.pontos }]);
-      try { localStorage.setItem(CHAVE_RANKING, JSON.stringify(ranking)); } catch { avisarArmazenamento(); }
       exibirRanking();
+      const versao = ++versaoRanking;
+      void armazenamento.registrarPontuacao(nomeJogador, jogo.pontos)
+        .then(registros => {
+          if (versao !== versaoRanking) return;
+          ranking = ordenarRanking(registros);
+          exibirRanking();
+        })
+        .catch(avisarErroRanking);
       const novoRecorde = jogo.pontos > recorde;
       if (novoRecorde) {
         recorde = jogo.pontos; recordeEl.textContent = String(recorde);

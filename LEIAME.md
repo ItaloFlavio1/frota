@@ -19,7 +19,7 @@ Na tela **Dados** há um botão para carregar um exemplo.
 2. No menu lateral, abra **SQL Editor** → **New query**, cole todo o conteúdo de
    [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Deve aparecer "Success".
    Se o banco já existe, execute o arquivo atualizado novamente para adicionar os campos de
-   forma de pagamento e as anotações gerais do Resumo, sem apagar os dados.
+   forma de pagamento, as anotações gerais do Resumo e o ranking compartilhado do jogo, sem apagar os dados.
 3. Crie o usuário da Camila: **Authentication → Users → Add user → Create new user**.
    Informe e-mail e senha e marque **Auto Confirm User**.
 4. Bloqueie cadastros de estranhos: **Authentication → Sign In / Providers** → desligue

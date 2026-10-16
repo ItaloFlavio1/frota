@@ -27,8 +27,20 @@ export const erroNoLink = (() => {
 function criarSupabase() {
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const erro = e => { if (e) throw new Error(traduzirErro(e.message)); };
+  const listarRanking = async () => {
+    const { data, error } = await sb.from('jogo_ranking').select('nome,pontos')
+      .order('pontos', { ascending: false }).order('created_at', { ascending: true }).limit(10);
+    erro(error);
+    return data;
+  };
   return {
     modo: 'supabase',
+    listarRanking,
+    async registrarPontuacao(nome, pontos) {
+      const { error } = await sb.from('jogo_ranking').insert({ nome, pontos });
+      erro(error);
+      return listarRanking();
+    },
     async usuario() {
       const { data } = await sb.auth.getSession();
       return data.session?.user ?? null;
@@ -121,6 +133,7 @@ function traduzirErro(msg = '') {
 // ---------------------------------------------------------------------------
 function criarLocal() {
   const CHAVE = 'frota-demo-v1';
+  const CHAVE_RANKING = 'frota-jogo-renan-ranking';
   let dados;
   try { dados = JSON.parse(localStorage.getItem(CHAVE)) || {}; } catch { dados = {}; }
   for (const t of TABELAS) dados[t] ??= [];
@@ -128,9 +141,26 @@ function criarLocal() {
     try { localStorage.setItem(CHAVE, JSON.stringify(dados)); } catch { /* sem armazenamento */ }
   };
   const copia = o => JSON.parse(JSON.stringify(o));
+  const listarRanking = async () => {
+    try {
+      const ranking = JSON.parse(localStorage.getItem(CHAVE_RANKING) || '[]');
+      return Array.isArray(ranking) ? ranking : [];
+    } catch {
+      return [];
+    }
+  };
 
   return {
     modo: 'local',
+    listarRanking,
+    async registrarPontuacao(nome, pontos) {
+      const ranking = [...await listarRanking(), { nome, pontos }]
+        .filter(r => r && typeof r.nome === 'string' && r.nome.trim()
+          && Number.isSafeInteger(r.pontos) && r.pontos >= 0)
+        .sort((a, b) => b.pontos - a.pontos).slice(0, 10);
+      localStorage.setItem(CHAVE_RANKING, JSON.stringify(ranking));
+      return ranking;
+    },
     async usuario() { return { email: 'demonstracao' }; },
     async entrar() {},
     async recuperarSenha() {},

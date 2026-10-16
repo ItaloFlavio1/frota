@@ -41,6 +41,23 @@ alter table anotacoes alter column caminhao_id drop not null;
 update anotacoes set caminhao_id = null where caminhao_id is not null;
 
 -- ---------------------------------------------------------------------
+-- Ranking compartilhado do Jogo do Renan
+-- ---------------------------------------------------------------------
+create table if not exists jogo_ranking (
+  id           uuid primary key default gen_random_uuid(),
+  nome         text not null check (char_length(btrim(nome)) between 1 and 24),
+  pontos       integer not null check (pontos >= 0),
+  created_at   timestamptz not null default now()
+);
+
+alter table jogo_ranking enable row level security;
+drop policy if exists jogo_ranking_leitura on jogo_ranking;
+create policy jogo_ranking_leitura on jogo_ranking for select to authenticated using (true);
+drop policy if exists jogo_ranking_insercao on jogo_ranking;
+create policy jogo_ranking_insercao on jogo_ranking for insert to authenticated with check (true);
+grant select, insert on table jogo_ranking to authenticated;
+
+-- ---------------------------------------------------------------------
 -- Clientes (contratantes dos fretes)
 -- ---------------------------------------------------------------------
 create table if not exists clientes (

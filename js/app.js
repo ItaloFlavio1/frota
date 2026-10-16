@@ -773,7 +773,7 @@ async function render() {
   const el = $conteudo();
   el.innerHTML = await (telas[rota] || telaResumo)();
   if (rota === 'painel') montarGraficos();
-  if (rota === 'jogo') montarJogo(el);
+  if (rota === 'jogo') montarJogo(el, db);
 }
 
 // Gráficos usam as cores do tema: redesenha ao trocar claro/escuro.

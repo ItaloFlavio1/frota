@@ -10,7 +10,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 TABELAS = ['caminhoes', 'clientes', 'viagens', 'fretes', 'recebimentos', 'abastecimentos',
-           'planos_manutencao', 'manutencoes', 'despesas']
+           'planos_manutencao', 'manutencoes', 'despesas', 'jogo_ranking']
 PASSO = 1000
 
 url = os.environ.get('SUPABASE_URL', '').rstrip('/')
